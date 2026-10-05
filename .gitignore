@@ -32,3 +32,8 @@ db.sqlite3
 local_test.db
 Azure DB.session.sql
 *.xlsx
+
+# AI Context and Review Guides (Keep Local)
+CODE_REVIEW_GUIDE.md
+AI_CONTEXT.md
+.gemini/

@@ -19,7 +19,7 @@ from app.models.db_models import *  # Ensure models are loaded before create_all
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logging.info("Application startup: l    oading retention taxonomy...")
+    logging.info("Application startup: loading retention taxonomy...")
     load_taxonomy()
 
     if engine is not None:
