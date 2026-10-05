@@ -33,9 +33,10 @@ class DocumentTaggedStatus(str, Enum):
     Backend-owned values (backend writes these on creation / first sync):
         AUTO_TAGGED, REVIEW_PENDING
     """
-    AUTO_TAGGED    = "Auto-Tagged"
+
+    AUTO_TAGGED = "Auto-Tagged"
     REVIEW_PENDING = "Review Pending"
-    REVIEWED       = "Reviewed"
+    REVIEWED = "Reviewed"
     MANUALLY_TAGGED = "Manually Tagged"
 
     @classmethod
@@ -71,10 +72,11 @@ class DeletionStatus(str, Enum):
         Not Deleted → (Deletion Revised ↔ Not Deleted) → Deletion Approved → Deleted
         'Deleted' is terminal.
     """
-    NOT_DELETED       = "Not Deleted"
-    DELETION_REVISED  = "Deletion Revised"
+
+    NOT_DELETED = "Not Deleted"
+    DELETION_REVISED = "Deletion Revised"
     DELETION_APPROVED = "Deletion Approved"
-    DELETED           = "Deleted"
+    DELETED = "Deleted"
 
     @classmethod
     def all_valid(cls) -> set[str]:
@@ -82,7 +84,9 @@ class DeletionStatus(str, Enum):
         return {m.value for m in cls}
 
 
-def validate_choice_value(value: str, enum_class: type[DocumentTaggedStatus | DeletionStatus]) -> None:
+def validate_choice_value(
+    value: str, enum_class: type[DocumentTaggedStatus | DeletionStatus]
+) -> None:
     """
     Validate that a string is a permitted choice value for its column before
     sending it to Graph API. Raises ValueError with a clear message on mismatch

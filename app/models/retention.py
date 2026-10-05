@@ -4,6 +4,7 @@ from typing import List, Optional
 
 class RetentionRecord(BaseModel):
     """Represents a single entry from the approved Retention Taxonomy."""
+
     id: str
     category: str
     section: str
@@ -26,6 +27,7 @@ class RetentionRecord(BaseModel):
 
 class RetentionTaxonomy(BaseModel):
     """Container for the full retention taxonomy knowledge base."""
+
     records: List[RetentionRecord]
     total_count: int
 

@@ -13,6 +13,7 @@ CRITICAL GOVERNANCE RULE:
   period has elapsed, it transitions to 'Eligible for Review', setting
   review_required=True to require explicit human authorization before disposal.
 """
+
 from datetime import date, datetime
 import re
 from typing import Optional, Tuple
@@ -20,19 +21,19 @@ from typing import Optional, Tuple
 try:
     from pydantic import BaseModel
 except ImportError:
+
     class BaseModel:
         def __init__(self, **kwargs):
             for k, v in kwargs.items():
                 setattr(self, k, v)
 
+
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ── Fiscal Year-End Configuration ────────────────────────────────────────────
-# Adjust these if the organisation has a different fiscal year-end.
-FISCAL_YEAR_END_MONTH = 6   # June
-FISCAL_YEAR_END_DAY   = 30  # 30th
+FISCAL_YEAR_END_MONTH = 6  # June
+FISCAL_YEAR_END_DAY = 30  # 30th
 
 
 class RetentionSchedule(BaseModel):
@@ -41,12 +42,11 @@ class RetentionSchedule(BaseModel):
     retention_period: str
     lifecycle_status: str  # 'Active' | 'Eligible for Review' | 'Permanent Retention' | 'Indeterminate'
     review_required: bool
-    review_reason: Optional[str] = None   # Explicit reason for human review
+    review_reason: Optional[str] = None  # Explicit reason for human review
     next_action: str
     trigger_condition: Optional[str] = None  # Official definition from Exhibit A Legend
 
 
-# ── Exhibit A: Official Legend Definitions ───────────────────────────────────
 LEGEND_DEFINITIONS = {
     "AL": "Remove files after related Investment/item/event has liquidated, terminated, completed, expired, settled, or concluded",
     "AV": "Administratively Valuable (Responsible team manually determines retention)",
@@ -64,16 +64,11 @@ LEGEND_DEFINITIONS = {
 
 
 def _parse_start_date(raw_date: Optional[str]) -> date:
-    """
-    Parse document date string into a date object.
-    Supports ISO formats (YYYY-MM-DD), slash formats (YYYY/MM/DD, MM/DD/YYYY),
-    and common text representations. Fallbacks to today's date if missing or unparseable.
-    """
     if not raw_date:
         return date.today()
 
     raw_date = str(raw_date).strip()
-    
+
     date_formats = [
         "%Y-%m-%d",
         "%Y/%m/%d",
@@ -97,12 +92,13 @@ def _parse_start_date(raw_date: Optional[str]) -> date:
         except ValueError:
             pass
 
-    logger.warning(f"Could not parse document date '{raw_date}'. Defaulting to today's date.")
+    logger.warning(
+        f"Could not parse document date '{raw_date}'. Defaulting to today's date."
+    )
     return date.today()
 
 
 def _add_years(start: date, years: int) -> date:
-    """Add years to a date, handling leap-year Feb 29 safely."""
     try:
         return start.replace(year=start.year + years)
     except ValueError:
@@ -110,7 +106,6 @@ def _add_years(start: date, years: int) -> date:
 
 
 def _add_months(start: date, months: int) -> date:
-    """Add months to a date."""
     new_month = start.month + months
     new_year = start.year + (new_month - 1) // 12
     new_month = (new_month - 1) % 12 + 1
@@ -119,13 +114,8 @@ def _add_months(start: date, months: int) -> date:
 
 
 def _fiscal_year_end(reference: date) -> date:
-    """
-    Return the fiscal year-end date on or after the reference date.
-    Uses FISCAL_YEAR_END_MONTH / FISCAL_YEAR_END_DAY configured above.
-    """
     fy_end = date(reference.year, FISCAL_YEAR_END_MONTH, FISCAL_YEAR_END_DAY)
     if reference > fy_end:
-        # Past this year's fiscal year-end — use next year's
         fy_end = date(reference.year + 1, FISCAL_YEAR_END_MONTH, FISCAL_YEAR_END_DAY)
     return fy_end
 
@@ -135,17 +125,6 @@ def calculate_retention_schedule(
     document_date: Optional[str] = None,
     evaluation_date: Optional[date] = None,
 ) -> RetentionSchedule:
-    """
-    Calculate the retention schedule and evaluate lifecycle status according to Exhibit A.
-
-    Args:
-        retention_rule: The rule string from taxonomy (e.g. 'FE+4', 'AL+2', 'Permanent', 'US+3', 'AV').
-        document_date: Date extracted from document understanding (e.g. '2026-01-15').
-        evaluation_date: Optional reference date to evaluate against (defaults to date.today()).
-
-    Returns:
-        RetentionSchedule with start date, end date, status, trigger condition, and human review flags.
-    """
     current_date = evaluation_date or date.today()
     start_date = _parse_start_date(document_date)
     start_date_str = start_date.isoformat()
@@ -164,7 +143,6 @@ def calculate_retention_schedule(
 
     rule_norm = retention_rule.strip().upper()
 
-    # ── Rule Type 1: Permanent ───────────────────────────────────────────────
     if "PERMANENT" in rule_norm:
         return RetentionSchedule(
             retention_start_date=start_date_str,
@@ -177,7 +155,6 @@ def calculate_retention_schedule(
             trigger_condition=LEGEND_DEFINITIONS["PERMANENT"],
         )
 
-    # ── Rule Type 2: Relative Months (e.g. '2 MONTHS', '6 MONTHS') ───────────
     month_match = re.search(r"(\d+)\s*MONTHS?", rule_norm, re.IGNORECASE)
     if month_match:
         months = int(month_match.group(1))
@@ -190,7 +167,11 @@ def calculate_retention_schedule(
             retention_period=f"{months} Month{'s' if months > 1 else ''}",
             lifecycle_status="Eligible for Review" if is_completed else "Active",
             review_required=is_completed,
-            review_reason="Retention period has elapsed. Approve disposal or retain." if is_completed else None,
+            review_reason=(
+                "Retention period has elapsed. Approve disposal or retain."
+                if is_completed
+                else None
+            ),
             next_action=(
                 "Human Review Required: Approve Disposal or Retain"
                 if is_completed
@@ -199,8 +180,6 @@ def calculate_retention_schedule(
             trigger_condition=f"Retain for {months} months from document date.",
         )
 
-    # ── Rule Type 3: Standard Enterprise Year Addition (+X or -X) ──────────────────
-    # Handles FE-4, AL-2, CE-1, YE-3, US-10, UO-5, AD-3, CD-1, AV-1, LA-3, etc.
     year_match = re.search(r"[+-](\d+)", rule_norm)
     if year_match:
         years = int(year_match.group(1))
@@ -208,7 +187,6 @@ def calculate_retention_schedule(
         end_date_str = end_date.isoformat()
         is_completed = current_date >= end_date
 
-        # Determine trigger condition based on prefix
         if rule_norm.startswith("FE"):
             trigger = f"Remove {years} years after fiscal year end (FE). Note: start date is used as reference; for precise FE calculation, verify fiscal year-end."
         elif rule_norm.startswith("AL"):
@@ -216,7 +194,9 @@ def calculate_retention_schedule(
         elif rule_norm.startswith("AC"):
             trigger = f"Remove {years} years after conclusion/publication of event (AC)"
         elif rule_norm.startswith("US"):
-            trigger = f"Retain for {years} years after being superseded by newer version (US)"
+            trigger = (
+                f"Retain for {years} years after being superseded by newer version (US)"
+            )
         elif rule_norm.startswith("UO"):
             trigger = f"Retain for {years} years after last unopened/modified date (UO)"
         elif rule_norm.startswith("AD"):
@@ -238,7 +218,11 @@ def calculate_retention_schedule(
             retention_period=f"{years} Year{'s' if years > 1 else ''}",
             lifecycle_status="Eligible for Review" if is_completed else "Active",
             review_required=is_completed,
-            review_reason="Retention period has elapsed. Approve disposal or retain." if is_completed else None,
+            review_reason=(
+                "Retention period has elapsed. Approve disposal or retain."
+                if is_completed
+                else None
+            ),
             next_action=(
                 "Human Review Required: Approve Disposal or Retain"
                 if is_completed
@@ -247,9 +231,6 @@ def calculate_retention_schedule(
             trigger_condition=trigger,
         )
 
-    # ── Rule Type 4: Standalone Legend Codes (without +X) ────────────────────
-
-    # US — Delete once superseded: review_required because supersession status is UNKNOWN
     if rule_norm == "US":
         return RetentionSchedule(
             retention_start_date=start_date_str,
@@ -262,7 +243,6 @@ def calculate_retention_schedule(
             trigger_condition=LEGEND_DEFINITIONS["US"],
         )
 
-    # AV — Administratively Valuable: ALWAYS requires manual determination
     if "AV" in rule_norm or "ADMINISTRATIVE" in rule_norm:
         return RetentionSchedule(
             retention_start_date=start_date_str,
@@ -275,7 +255,6 @@ def calculate_retention_schedule(
             trigger_condition=LEGEND_DEFINITIONS["AV"],
         )
 
-    # AD — Delete once asset is disposed: review_required because disposal date is UNKNOWN
     if rule_norm == "AD":
         return RetentionSchedule(
             retention_start_date=start_date_str,
@@ -288,7 +267,6 @@ def calculate_retention_schedule(
             trigger_condition=LEGEND_DEFINITIONS["AD"],
         )
 
-    # LA — Life of Asset: no disposal date known yet, flag for monitoring
     if rule_norm == "LA":
         return RetentionSchedule(
             retention_start_date=start_date_str,
@@ -301,7 +279,6 @@ def calculate_retention_schedule(
             trigger_condition=LEGEND_DEFINITIONS["LA"],
         )
 
-    # AL — Remove after event liquidates/terminates: review_required because event date is UNKNOWN
     if rule_norm == "AL":
         return RetentionSchedule(
             retention_start_date=start_date_str,
@@ -314,7 +291,6 @@ def calculate_retention_schedule(
             trigger_condition=LEGEND_DEFINITIONS["AL"],
         )
 
-    # AC — After Conclusion/Publication: review_required because event date is UNKNOWN
     if rule_norm == "AC":
         return RetentionSchedule(
             retention_start_date=start_date_str,
@@ -327,7 +303,6 @@ def calculate_retention_schedule(
             trigger_condition=LEGEND_DEFINITIONS["AC"],
         )
 
-    # UO — Unopened: last-modified date is unknown; flag for review
     if rule_norm == "UO":
         return RetentionSchedule(
             retention_start_date=start_date_str,
@@ -340,7 +315,6 @@ def calculate_retention_schedule(
             trigger_condition=LEGEND_DEFINITIONS["UO"],
         )
 
-    # FE — Fiscal Year End (no +N): use fiscal year-end
     if rule_norm == "FE":
         end_date = _fiscal_year_end(start_date)
         end_date_str = end_date.isoformat()
@@ -351,7 +325,11 @@ def calculate_retention_schedule(
             retention_period="End of Fiscal Year",
             lifecycle_status="Eligible for Review" if is_completed else "Active",
             review_required=is_completed,
-            review_reason="Retention period has elapsed (fiscal year-end). Approve disposal or retain." if is_completed else None,
+            review_reason=(
+                "Retention period has elapsed (fiscal year-end). Approve disposal or retain."
+                if is_completed
+                else None
+            ),
             next_action=(
                 "Human Review Required: Approve Disposal or Retain"
                 if is_completed
@@ -360,7 +338,6 @@ def calculate_retention_schedule(
             trigger_condition=LEGEND_DEFINITIONS["FE"],
         )
 
-    # YE / CE — Calendar Year End (no +N): use Dec 31
     if rule_norm in ("YE", "CE"):
         end_date = date(start_date.year, 12, 31)
         end_date_str = end_date.isoformat()
@@ -371,7 +348,11 @@ def calculate_retention_schedule(
             retention_period="End of Calendar Year",
             lifecycle_status="Eligible for Review" if is_completed else "Active",
             review_required=is_completed,
-            review_reason="Retention period has elapsed (calendar year-end). Approve disposal or retain." if is_completed else None,
+            review_reason=(
+                "Retention period has elapsed (calendar year-end). Approve disposal or retain."
+                if is_completed
+                else None
+            ),
             next_action=(
                 "Human Review Required: Approve Disposal or Retain"
                 if is_completed
@@ -380,7 +361,6 @@ def calculate_retention_schedule(
             trigger_condition=LEGEND_DEFINITIONS["YE"],
         )
 
-    # ── Rule Type 5: TBD or Unspecified ──────────────────────────────────────
     return RetentionSchedule(
         retention_start_date=start_date_str,
         retention_end_date=None,

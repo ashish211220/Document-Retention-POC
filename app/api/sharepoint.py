@@ -14,6 +14,7 @@ Routes:
   POST /api/sharepoint/sync/bulk          — Queue all documents for background sync
   POST /api/sharepoint/sync/retry         — Retry any failed sync steps
 """
+
 import logging
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
@@ -32,11 +33,6 @@ logger = logging.getLogger(__name__)
 
 
 def _get_token() -> str:
-    """
-    Acquires a Graph API bearer token using the client credentials flow.
-    MSAL handles caching — this is fast on cache hits (no network call).
-    Raises HTTP 503 if the auth service is not configured.
-    """
     if not graph_auth_service:
         raise HTTPException(
             status_code=503,
@@ -49,10 +45,10 @@ def _get_token() -> str:
         return graph_auth_service.get_access_token()
     except Exception as exc:
         logger.error(f"Token acquisition failed: {exc}")
-        raise HTTPException(status_code=503, detail=f"Could not acquire Graph API token: {exc}")
+        raise HTTPException(
+            status_code=503, detail=f"Could not acquire Graph API token: {exc}"
+        )
 
-
-# ── Response Models ───────────────────────────────────────────────────────────
 
 class SyncResponse(BaseModel):
     item_id: str
@@ -64,14 +60,8 @@ class SyncResponse(BaseModel):
     sharepoint_updated: bool
 
 
-# ── List Documents ────────────────────────────────────────────────────────────
-
 @router.get("/documents", summary="List files in POC_Source_Documents library")
 async def list_documents():
-    """
-    Returns the files currently in the configured SharePoint document library.
-    Token is acquired automatically via client credentials — no login needed.
-    """
     token = _get_token()
     try:
         docs = await sharepoint_service.get_documents(token)
@@ -81,32 +71,22 @@ async def list_documents():
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-# ── Single Document Sync ──────────────────────────────────────────────────────
-
-async def _process_single_document(token: str, item_id: str, filename: str) -> SyncResponse:
-    """
-    Full pipeline for one document:
-      1. Download from SharePoint
-      2. OCR via Azure Document Intelligence
-      3. Document Understanding via Azure OpenAI
-      4. Classification via hybrid search + LLM
-      5. Sync results back to SharePoint (via sharepoint_sync module)
-    """
-    # 1. Download
+async def _process_single_document(
+    token: str, item_id: str, filename: str
+) -> SyncResponse:
     logger.info(f"[{filename}] Downloading from SharePoint (item_id={item_id})...")
     file_content = await sharepoint_service.download_document(token, item_id)
 
-    # 2. OCR
     logger.info(f"[{filename}] Extracting text via Azure Document Intelligence...")
-    document_profile = await analyze_and_normalize_document(file_content, filename, source="SharePoint")
+    document_profile = await analyze_and_normalize_document(
+        file_content, filename, source="SharePoint"
+    )
 
-    # 3. Understanding
     logger.info(f"[{filename}] Running document understanding via Azure OpenAI...")
     understanding = analyze_document(document_profile)
     if not understanding:
         raise Exception("Document understanding returned no result.")
 
-    # 4. Classify
     logger.info(f"[{filename}] Classifying...")
     classification = classify_document(document_profile, understanding)
     logger.info(
@@ -115,10 +95,6 @@ async def _process_single_document(token: str, item_id: str, filename: str) -> S
         f"retention_code={classification.retention_code}"
     )
 
-    # 5. Sync back to SharePoint
-    # NOTE: full sync (Purview label + metadata + list row + audit log) is handled
-    # by app/sync/sharepoint_sync.py. The direct call below is a lightweight fallback
-    # for POC / ad-hoc single-document calls that don't go through the DB pipeline.
     sharepoint_updated = False
     if classification.retention_code:
         try:
@@ -131,7 +107,9 @@ async def _process_single_document(token: str, item_id: str, filename: str) -> S
             sharepoint_updated = True
             logger.info(f"[{filename}] SharePoint retention label updated.")
         except Exception as exc:
-            logger.warning(f"[{filename}] SharePoint update failed (non-fatal for POC): {exc}")
+            logger.warning(
+                f"[{filename}] SharePoint update failed (non-fatal for POC): {exc}"
+            )
     else:
         logger.warning(f"[{filename}] No retention_code — skipping SharePoint update.")
 
@@ -146,12 +124,12 @@ async def _process_single_document(token: str, item_id: str, filename: str) -> S
     )
 
 
-@router.post("/sync/{item_id}", response_model=SyncResponse, summary="Classify and sync a single document")
+@router.post(
+    "/sync/{item_id}",
+    response_model=SyncResponse,
+    summary="Classify and sync a single document",
+)
 async def sync_document(item_id: str, filename: str):
-    """
-    Downloads, classifies, and syncs a single SharePoint document by its item ID.
-    Token is acquired automatically — no auth step needed.
-    """
     token = _get_token()
     try:
         return await _process_single_document(token, item_id, filename)
@@ -159,8 +137,6 @@ async def sync_document(item_id: str, filename: str):
         logger.error(f"sync_document failed for {item_id}: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
-
-# ── Bulk Sync ─────────────────────────────────────────────────────────────────
 
 async def _bulk_process_background(token: str, documents: List[Dict[str, Any]]):
     logger.info(f"Bulk sync started — {len(documents)} documents queued.")
@@ -177,8 +153,9 @@ async def _bulk_process_background(token: str, documents: List[Dict[str, Any]]):
 
         try:
             logger.info(f"--- Bulk: {filename} ---")
-            # Re-acquire token per-document to handle expiry in long-running batches
-            fresh_token = graph_auth_service.get_access_token() if graph_auth_service else token
+            fresh_token = (
+                graph_auth_service.get_access_token() if graph_auth_service else token
+            )
             await _process_single_document(fresh_token, item_id, filename)
             success_count += 1
         except Exception as exc:
@@ -188,17 +165,18 @@ async def _bulk_process_background(token: str, documents: List[Dict[str, Any]]):
     logger.info(f"Bulk sync complete — success={success_count}, failed={failure_count}")
 
 
-@router.post("/sync/bulk", summary="Queue all documents in the library for background sync")
+@router.post(
+    "/sync/bulk", summary="Queue all documents in the library for background sync"
+)
 async def sync_bulk_documents(background_tasks: BackgroundTasks):
-    """
-    Fetches all files from POC_Source_Documents and queues them for background
-    classification + sync. Token is acquired automatically.
-    """
     token = _get_token()
     try:
         docs = await sharepoint_service.get_documents(token)
         if not docs:
-            return {"message": "No documents found in SharePoint library.", "queued_count": 0}
+            return {
+                "message": "No documents found in SharePoint library.",
+                "queued_count": 0,
+            }
 
         background_tasks.add_task(_bulk_process_background, token, docs)
         return {
@@ -211,23 +189,17 @@ async def sync_bulk_documents(background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-# ── Retry Failed Syncs ────────────────────────────────────────────────────────
-
 @router.post("/sync/retry", summary="Retry all failed SharePoint sync steps")
 async def retry_failed(db: AsyncSession = Depends(get_db)):
-    """
-    Finds all classifications with failed sync steps (from sharepoint_sync_logs)
-    and retries them. Idempotency guards ensure already-succeeded steps are skipped.
-    """
     if db is None:
         raise HTTPException(status_code=503, detail="Database not configured.")
 
     token = _get_token()
     try:
         from app.sync.sharepoint_sync import retry_failed_syncs
+
         summary = await retry_failed_syncs(token=token, db=db)
         return {"retry_summary": summary}
     except Exception as exc:
         logger.error(f"Retry sync failed: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
-

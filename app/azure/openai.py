@@ -10,6 +10,7 @@ Handles:
 NOTE: The endpoint in .env may be a full URL including deployment path.
 We extract the base endpoint and use deployment name separately for SDK compatibility.
 """
+
 import json
 import re
 from typing import Optional
@@ -25,7 +26,6 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Max characters of document content to send to OpenAI (to stay within context limits)
 MAX_CONTENT_CHARS = 8000
 
 
@@ -51,7 +51,9 @@ def _get_client() -> AzureOpenAI:
     )
 
 
-def chat_completion(system_prompt: str, user_prompt: str, temperature: float = 0.1) -> Optional[str]:
+def chat_completion(
+    system_prompt: str, user_prompt: str, temperature: float = 0.1
+) -> Optional[str]:
     """
     Send a chat completion request to Azure OpenAI and return the raw response text.
 
@@ -76,7 +78,9 @@ def chat_completion(system_prompt: str, user_prompt: str, temperature: float = 0
             response_format={"type": "json_object"},
         )
         content = response.choices[0].message.content
-        logger.info(f"Azure OpenAI response received. Tokens used: {response.usage.total_tokens}")
+        logger.info(
+            f"Azure OpenAI response received. Tokens used: {response.usage.total_tokens}"
+        )
         return content
     except Exception as e:
         logger.error(f"Azure OpenAI call failed: {e}")
@@ -88,7 +92,6 @@ def parse_json_response(raw: str) -> dict:
     Parse the model's JSON response string into a Python dict.
     Handles common formatting issues like markdown code fences.
     """
-    # Strip markdown code fences if present
     raw = raw.strip()
     if raw.startswith("```"):
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
@@ -100,7 +103,9 @@ def truncate_content(content: str, max_chars: int = MAX_CONTENT_CHARS) -> str:
     """Truncate document content to avoid exceeding context window limits."""
     if len(content) <= max_chars:
         return content
-    logger.warning(f"Document content truncated from {len(content)} to {max_chars} chars for OpenAI.")
+    logger.warning(
+        f"Document content truncated from {len(content)} to {max_chars} chars for OpenAI."
+    )
     return content[:max_chars] + "\n\n[...content truncated for analysis...]"
 
 
@@ -110,11 +115,9 @@ def generate_embedding(text: str) -> list[float]:
     """
     client = _get_client()
     try:
-        # Avoid hitting token limits for embeddings
         text = truncate_content(text, max_chars=8000)
         response = client.embeddings.create(
-            input=text,
-            model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME
+            input=text, model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME
         )
         return response.data[0].embedding
     except Exception as e:

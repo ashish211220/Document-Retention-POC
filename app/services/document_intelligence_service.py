@@ -1,54 +1,64 @@
 import uuid
 from app.azure.document_intelligence import analyze_document_raw
-from app.models.document import DocumentProfile, DocumentMetadata, DocumentStructure, Page, Paragraph, Table
+from app.models.document import (
+    DocumentProfile,
+    DocumentMetadata,
+    DocumentStructure,
+    Page,
+    Paragraph,
+    Table,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-async def analyze_and_normalize_document(file_bytes: bytes, filename: str) -> DocumentProfile:
+
+async def analyze_and_normalize_document(
+    file_bytes: bytes, filename: str
+) -> DocumentProfile:
     logger.info(f"Starting document intelligence service for {filename}")
     raw_result = await analyze_document_raw(file_bytes)
     return normalize_response(raw_result, filename)
 
+
 def normalize_response(result, filename: str) -> DocumentProfile:
     document_id = str(uuid.uuid4())
     content = result.content if result.content else ""
-    
+
     pages = []
     if hasattr(result, "pages") and result.pages:
         for p in result.pages:
-            pages.append(Page(
-                page_number=p.page_number,
-                width=p.width,
-                height=p.height,
-                unit=p.unit
-            ))
-            
+            pages.append(
+                Page(
+                    page_number=p.page_number,
+                    width=p.width,
+                    height=p.height,
+                    unit=p.unit,
+                )
+            )
+
     paragraphs = []
     if hasattr(result, "paragraphs") and result.paragraphs:
         for para in result.paragraphs:
-            paragraphs.append(Paragraph(
-                content=para.content,
-                role=para.role
-            ))
-            
+            paragraphs.append(Paragraph(content=para.content, role=para.role))
+
     tables = []
     if hasattr(result, "tables") and result.tables:
         for tb in result.tables:
             cells = []
             if hasattr(tb, "cells"):
                 for cell in tb.cells:
-                    cells.append({
-                        "row_index": cell.row_index,
-                        "column_index": cell.column_index,
-                        "content": cell.content
-                    })
-            tables.append(Table(
-                row_count=tb.row_count,
-                column_count=tb.column_count,
-                cells=cells
-            ))
-            
+                    cells.append(
+                        {
+                            "row_index": cell.row_index,
+                            "column_index": cell.column_index,
+                            "content": cell.content,
+                        }
+                    )
+            tables.append(
+                Table(row_count=tb.row_count, column_count=tb.column_count, cells=cells)
+            )
+
     metadata = DocumentMetadata(page_count=len(pages))
     structure = DocumentStructure(pages=pages, paragraphs=paragraphs, tables=tables)
 
@@ -72,8 +82,10 @@ def normalize_response(result, filename: str) -> DocumentProfile:
         content=content,
         ocr_confidence=ocr_confidence,
         metadata=metadata,
-        structure=structure
+        structure=structure,
     )
-    
-    logger.info(f"Normalized DocumentProfile created for {filename} with ID {document_id}")
+
+    logger.info(
+        f"Normalized DocumentProfile created for {filename} with ID {document_id}"
+    )
     return profile

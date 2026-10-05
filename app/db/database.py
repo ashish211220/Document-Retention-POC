@@ -5,8 +5,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Fallback to sqlite if DATABASE_URL is not set (for testing purposes) or fix driver
-# SQLAlchemy asyncpg URL format: postgresql+asyncpg://user:password@host/dbname
 url = DATABASE_URL
 if url and url.startswith("postgresql://"):
     url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
@@ -20,9 +18,12 @@ if url:
         engine, class_=AsyncSession, expire_on_commit=False
     )
 else:
-    logger.warning("DATABASE_URL is not set. Database integration will not be available.")
+    logger.warning(
+        "DATABASE_URL is not set. Database integration will not be available."
+    )
 
 Base = declarative_base()
+
 
 async def get_db():
     if async_session is None:

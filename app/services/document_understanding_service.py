@@ -10,6 +10,7 @@ CRITICAL BUSINESS RULE:
   categories, or classification data. It only understands the document.
   Classification happens in Phase 5 using the approved taxonomy.
 """
+
 from typing import Optional
 from app.models.document import DocumentProfile
 from app.models.classification import DocumentUnderstanding
@@ -46,33 +47,27 @@ Return ONLY this JSON structure:
 
 
 def analyze_document(profile: DocumentProfile) -> Optional[DocumentUnderstanding]:
-    """
-    Run AI understanding on a DocumentProfile.
-
-    Args:
-        profile: The normalized DocumentProfile from Azure Document Intelligence.
-
-    Returns:
-        A DocumentUnderstanding object, or None if OpenAI is not configured or fails.
-    """
     from app.config import AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY
+
     if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_API_KEY:
         logger.warning("Azure OpenAI not configured — skipping document understanding.")
         return None
 
     logger.info(f"Starting document understanding for: {profile.document_name}")
 
-    # Build the user prompt from available content
     content = truncate_content(profile.content)
 
-    # Include paragraph roles for better context (title, section heading, etc.)
     structured_hints = []
     for para in profile.structure.paragraphs[:20]:  # First 20 paragraphs
         role = para.role or "body"
         if para.role in ("title", "sectionHeading", "pageHeader"):
             structured_hints.append(f"[{role.upper()}] {para.content}")
 
-    hints_text = "\n".join(structured_hints) if structured_hints else "No structured headings detected."
+    hints_text = (
+        "\n".join(structured_hints)
+        if structured_hints
+        else "No structured headings detected."
+    )
 
     user_prompt = f"""Document Name: {profile.document_name}
 File Type: {profile.file_type}
@@ -109,5 +104,7 @@ Page Count: {profile.metadata.page_count}
         return understanding
 
     except Exception as e:
-        logger.error(f"Document understanding failed for '{profile.document_name}': {e}")
+        logger.error(
+            f"Document understanding failed for '{profile.document_name}': {e}"
+        )
         return None
