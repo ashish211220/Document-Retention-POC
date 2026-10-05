@@ -61,6 +61,7 @@ class SyncResponse(BaseModel):
 
 
 @router.get("/documents", summary="List files in POC_Source_Documents library")
+# API Endpoint: Fetches all files from the SharePoint document library
 async def list_documents():
     token = _get_token()
     try:
@@ -71,6 +72,7 @@ async def list_documents():
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# Runs the full AI extraction and classification pipeline for one document
 async def _process_single_document(
     token: str, item_id: str, filename: str
 ) -> SyncResponse:
@@ -129,6 +131,7 @@ async def _process_single_document(
     response_model=SyncResponse,
     summary="Classify and sync a single document",
 )
+# API Endpoint: Manually classifies and syncs a single SharePoint document by ID
 async def sync_document(item_id: str, filename: str):
     token = _get_token()
     try:
@@ -168,6 +171,7 @@ async def _bulk_process_background(token: str, documents: List[Dict[str, Any]]):
 @router.post(
     "/sync/bulk", summary="Queue all documents in the library for background sync"
 )
+# API Endpoint: Queues all documents in the library for background processing
 async def sync_bulk_documents(background_tasks: BackgroundTasks):
     token = _get_token()
     try:
@@ -190,6 +194,7 @@ async def sync_bulk_documents(background_tasks: BackgroundTasks):
 
 
 @router.post("/sync/retry", summary="Retry all failed SharePoint sync steps")
+# API Endpoint: Retries any SharePoint sync steps that failed previously
 async def retry_failed(db: AsyncSession = Depends(get_db)):
     if db is None:
         raise HTTPException(status_code=503, detail="Database not configured.")

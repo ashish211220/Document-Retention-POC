@@ -46,6 +46,7 @@ Return ONLY this JSON structure:
 }"""
 
 
+# Uses Azure OpenAI to understand the document's intent and context
 def analyze_document(profile: DocumentProfile) -> Optional[DocumentUnderstanding]:
     from app.config import AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY
 

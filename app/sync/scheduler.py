@@ -69,6 +69,7 @@ async def _with_backoff(coro_factory, label: str, max_total_wait: float = 120.0)
                 raise
 
 
+# Retrieves all files from the configured SharePoint drive
 async def _list_drive_items(token: str, drive_id: str) -> List[Dict[str, Any]]:
     headers = {"Authorization": f"Bearer {token}"}
     url = f"{GRAPH_BASE}/drives/{drive_id}/root/children?$top=100&$select=id,name,lastModifiedDateTime,webUrl,file&$expand=listItem($select=id)"
@@ -88,6 +89,7 @@ async def _list_drive_items(token: str, drive_id: str) -> List[Dict[str, Any]]:
     return items
 
 
+# Downloads the actual binary file content from SharePoint
 async def _download_drive_item(token: str, drive_id: str, item_id: str) -> bytes:
     headers = {"Authorization": f"Bearer {token}"}
     url = f"{GRAPH_BASE}/drives/{drive_id}/items/{item_id}/content"
@@ -97,6 +99,7 @@ async def _download_drive_item(token: str, drive_id: str, item_id: str) -> bytes
         return resp.content
 
 
+# Checks if this document already exists in the SharePoint Retention list
 async def _query_existing_list_item(
     token: str, site_id: str, retention_list_id: str, document_number: int
 ) -> Optional[str]:
@@ -490,6 +493,7 @@ async def _process_one_document(
                 }
 
 
+# Runs one complete cycle of polling and processing new files
 async def _run_poll_cycle(token: str) -> None:
     semaphore = asyncio.Semaphore(SYNC_BATCH_CONCURRENCY)
 

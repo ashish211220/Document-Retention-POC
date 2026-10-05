@@ -120,6 +120,7 @@ def _fiscal_year_end(reference: date) -> date:
     return fy_end
 
 
+# Calculates exact start and end dates based on the document's assigned retention rule
 def calculate_retention_schedule(
     retention_rule: Optional[str],
     document_date: Optional[str] = None,

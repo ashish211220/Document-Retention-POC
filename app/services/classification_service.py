@@ -60,6 +60,7 @@ def _build_candidates_text(candidates: List[RetentionRecord]) -> str:
     return "\n\n".join(lines)
 
 
+# Combines AI confidence, search rank, and keyword overlap into a single final score
 def _calculate_confidence(
     ai_confidence: float,
     candidate_rank: int,
@@ -99,6 +100,7 @@ def _calculate_confidence(
     return combined
 
 
+# The main AI orchestration function that selects the best retention rule for a document
 def classify_document(
     profile: DocumentProfile,
     understanding: DocumentUnderstanding,

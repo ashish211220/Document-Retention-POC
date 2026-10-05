@@ -13,6 +13,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+# Extracts text from the document using Azure Document Intelligence
 async def analyze_and_normalize_document(
     file_bytes: bytes, filename: str
 ) -> DocumentProfile:

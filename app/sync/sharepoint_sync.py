@@ -38,6 +38,7 @@ class LabelNotFoundError(Exception):
         )
 
 
+# Formats the sequential document ID as a string
 def format_document_id(document_number: int) -> str:
     return str(document_number)
 
@@ -569,6 +570,7 @@ async def sync_classification_to_sharepoint(
     return result
 
 
+# Scans the database for failed sync logs and re-attempts pushing them to SharePoint
 async def retry_failed_syncs(
     token: str,
     db: AsyncSession,
