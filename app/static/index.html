@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Document Retention — Human Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #1e2633;
+      --border: #30363d;
+      --accent: #4f8ef7;
+      --accent-dim: rgba(79,142,247,0.12);
+      --green: #3fb950;
+      --yellow: #e3b341;
+      --red: #f85149;
+      --orange: #ff8c42;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Top Bar ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header .logo {
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }
+    header .sep { color: var(--border); font-size: 1.3rem; }
+    header .title { font-size: 0.9rem; color: var(--muted); }
+    header .refresh-btn {
+      margin-left: auto;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    header .refresh-btn:hover { background: rgba(79,142,247,0.22); }
+
+    /* ── Layout ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 1.5rem;
+      padding: 1.5rem 2rem;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    /* ── Stats Strip ── */
+    .stats {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.4rem;
+    }
+    .stat-card .label { font-size: 0.75rem; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; margin-top: 4px; }
+    .stat-card.pending .value  { color: var(--yellow); }
+    .stat-card.review  .value  { color: var(--accent); }
+    .stat-card.approved .value { color: var(--red); }
+    .stat-card.retained .value { color: var(--green); }
+
+    /* ── Panel ── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 0.85rem 1.2rem;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .panel-header .badge {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    /* ── Filters ── */
+    .filters {
+      padding: 0.75rem 1.2rem;
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--border);
+    }
+    .filters select, .filters input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 0.78rem;
+      font-family: inherit;
+      outline: none;
+    }
+    .filters select:focus, .filters input:focus { border-color: var(--accent); }
+
+    /* ── Queue Table ── */
+    .queue-table { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    thead th {
+      background: var(--surface2);
+      color: var(--muted);
+      font-weight: 600;
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    tbody tr:hover { background: var(--surface2); }
+    tbody tr.selected { background: var(--accent-dim); }
+    tbody td { padding: 10px 12px; vertical-align: middle; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Status Badges ── */
+    .badge-status {
+      display: inline-block;
+      border-radius: 10px;
+      padding: 2px 8px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .s-pending           { background: rgba(227,179,65,0.15); color: var(--yellow); }
+    .s-retained          { background: rgba(63,185,80,0.15);  color: var(--green); }
+    .s-approved_deletion { background: rgba(248,81,73,0.15);  color: var(--red); }
+    .s-not_required      { background: rgba(139,148,158,0.12); color: var(--muted); }
+    .s-review_recommended { background: rgba(79,142,247,0.15); color: var(--accent); }
+    .s-active            { background: rgba(63,185,80,0.12);  color: var(--green); }
+    .s-eligible          { background: rgba(255,140,66,0.15); color: var(--orange); }
+    .s-permanent         { background: rgba(79,142,247,0.15); color: var(--accent); }
+    .s-indeterminate     { background: rgba(248,81,73,0.15);  color: var(--red); }
+    .s-reclassified      { background: rgba(163,113,247,0.15); color: #a371f7; }
+    .s-legal_hold        { background: rgba(210,153,34,0.2);  color: #d29922; }
+
+    .confidence { font-weight: 600; }
+    .conf-high   { color: var(--green); }
+    .conf-med    { color: var(--yellow); }
+    .conf-low    { color: var(--red); }
+
+    .hold-badge {
+      display: inline-block;
+      background: #d29922;
+      color: #fff;
+      font-size: 0.65rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* ── Detail Panel ── */
+    .detail-panel { overflow-y: auto; max-height: calc(100vh - 160px); }
+
+    .detail-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 280px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      gap: 0.5rem;
+    }
+    .detail-empty svg { opacity: 0.3; }
+
+    .detail-body { padding: 1rem 1.2rem; }
+
+    .detail-doc-name {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      word-break: break-all;
+    }
+    .detail-doc-meta {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    .detail-section { margin-bottom: 1rem; }
+    .detail-section-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      padding-bottom: 0.3rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .kv { display: flex; gap: 0.5rem; font-size: 0.78rem; margin-bottom: 4px; }
+    .kv .k { color: var(--muted); width: 130px; flex-shrink: 0; }
+    .kv .v { word-break: break-word; }
+
+    .review-reasons {
+      background: rgba(227,179,65,0.08);
+      border: 1px solid rgba(227,179,65,0.25);
+      border-radius: 6px;
+      padding: 0.7rem 0.9rem;
+      font-size: 0.78rem;
+      margin-bottom: 1rem;
+    }
+    .review-reasons .reason-title { color: var(--yellow); font-weight: 600; margin-bottom: 0.4rem; font-size: 0.75rem; }
+    .review-reasons ul { list-style: none; padding: 0; }
+    .review-reasons li { padding: 2px 0; color: var(--text); }
+    .review-reasons li::before { content: "⚠ "; color: var(--yellow); }
+
+    /* ── Action Buttons ── */
+    .action-bar {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      font-family: inherit;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn-retain   { background: var(--green);  color: #fff; }
+    .btn-delete   { background: var(--red);    color: #fff; }
+    .btn-reclassify { background: #a371f7;     color: #fff; }
+    .btn-hold     { background: #d29922;       color: #fff; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+    /* ── Audit History ── */
+    .audit-list { display: flex; flex-direction: column; gap: 6px; }
+    .audit-item {
+      background: var(--surface2);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.75rem;
+    }
+    .audit-item .event-type { font-weight: 600; color: var(--accent); }
+    .audit-item .event-time { color: var(--muted); font-size: 0.7rem; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      width: 460px;
+      max-width: 95vw;
+    }
+    .modal h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+    .modal p  { font-size: 0.82rem; color: var(--muted); margin-bottom: 1rem; line-height: 1.5; }
+    .modal label { font-size: 0.78rem; font-weight: 500; display: block; margin-bottom: 4px; }
+    .modal input, .modal textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      font-family: inherit;
+      margin-bottom: 1rem;
+      outline: none;
+      resize: vertical;
+    }
+    .modal input:focus, .modal textarea:focus { border-color: var(--accent); }
+    .modal-actions { display: flex; gap: 0.6rem; justify-content: flex-end; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-size: 0.82rem;
+      display: none;
+      z-index: 200;
+      max-width: 320px;
+    }
+    #toast.show { display: block; }
+    #toast.success { border-left: 3px solid var(--green); }
+    #toast.error   { border-left: 3px solid var(--red); }
+
+    /* ── Empty / Loading ── */
+    .loading, .empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .spinner {
+      display: inline-block;
+      width: 22px; height: 22px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 0.5rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+
+<body>
+  <header>
+    <span class="logo">🗂 DocRetention AI</span>
+    <span class="sep">|</span>
+    <span class="title">Human Review Dashboard</span>
+    <div class="actions" style="margin-left: auto; display: flex; gap: 10px;">
+
+      <button class="refresh-btn upload-btn" onclick="openModal('modal-upload')" style="background: var(--accent); color: white; border-color: var(--accent);">📤 Upload Document</button>
+      <button class="refresh-btn" onclick="loadQueue()">⟳ Refresh</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat-card pending">
+        <div class="label">Pending Review</div>
+        <div class="value" id="stat-pending">—</div>
+      </div>
+      <div class="stat-card review">
+        <div class="label">Total Documents</div>
+        <div class="value" id="stat-total">—</div>
+      </div>
+      <div class="stat-card approved">
+        <div class="label">Deletion Approved</div>
+        <div class="value" id="stat-approved">—</div>
+      </div>
+      <div class="stat-card retained">
+        <div class="label">Retained</div>
+        <div class="value" id="stat-retained">—</div>
+      </div>
+    </div>
+
+    <!-- Left: Review Queue -->
+    <div class="panel">
+      <div class="panel-header">
+        Review Queue
+        <span class="badge" id="queue-count">0</span>
+      </div>
+      <div class="filters">
+        <select id="filter-status" onchange="loadQueue()">
+          <option value="">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="retained">Retained</option>
+          <option value="approved_deletion">Approved Deletion</option>
+          <option value="reclassified">Reclassified</option>
+        </select>
+        <select id="filter-lifecycle" onchange="loadQueue()">
+          <option value="">All Lifecycle</option>
+          <option value="Active">Active</option>
+          <option value="Eligible for Review">Eligible for Review</option>
+          <option value="Permanent Retention">Permanent Retention</option>
+          <option value="Indeterminate">Indeterminate</option>
+        </select>
+        <input id="filter-rule" placeholder="Retention Rule (e.g. FE+4)" oninput="debounceLoad()" />
+        <input id="filter-min-conf" type="number" step="0.1" min="0" max="1" placeholder="Min Conf (0-1)" oninput="debounceLoad()" style="width: 100px" />
+        <input id="filter-max-conf" type="number" step="0.1" min="0" max="1" placeholder="Max Conf (0-1)" oninput="debounceLoad()" style="width: 100px" />
+        <input id="filter-owner" placeholder="Team owner…" oninput="debounceLoad()" />
+      </div>
+      <div class="queue-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Document</th>
+              <th>Type</th>
+              <th>Retention End</th>
+              <th>Confidence</th>
+              <th>Lifecycle</th>
+              <th>Review Status</th>
+            </tr>
+          </thead>
+          <tbody id="queue-body">
+            <tr><td colspan="6" class="loading"><div class="spinner"></div><br>Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right: Detail Panel -->
+    <div class="panel detail-panel" id="detail-panel">
+      <div class="panel-header">Document Review Detail</div>
+      <div class="detail-empty" id="detail-empty">
+        <svg width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <p>Select a document from the queue</p>
+      </div>
+      <div class="detail-body" id="detail-body" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- Retain Modal -->
+  <div class="modal-overlay" id="modal-retain">
+    <div class="modal">
+      <h3>✅ Retain Document</h3>
+      <p>The document will be marked as <strong>Retained</strong>. This decision is recorded in the audit trail.</p>
+      <label>Reviewer ID *</label>
+      <input id="retain-reviewer" placeholder="Your employee ID or name" />
+      <label>Comments (optional)</label>
+      <textarea id="retain-comments" rows="3" placeholder="Reason for retaining…"></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('modal-retain')">Cancel</button>
+        <button class="btn btn-retain" onclick="submitRetain()">Confirm Retain</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Approve Deletion Modal -->
+  <div class="modal-overlay" id="modal-delete">
+    <div class="modal">
+      <h3>⚠️ Approve Deletion</h3>
+      <p>You are approving this document for deletion. <strong>This does NOT automatically delete the document.</strong> A separate authorized deletion process will be required. This decision is permanently recorded.</p>
+      <label>Reviewer ID *</label>
+      <input id="delete-reviewer" placeholder="Your employee ID or name" />
+      <label>Reason for Deletion Approval *</label>
+      <textarea id="delete-comments" rows="3" placeholder="Must explain why deletion is approved…"></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('modal-delete')">Cancel</button>
+        <button class="btn btn-delete" onclick="submitDelete()">Approve Deletion</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reclassify Modal -->
+  <div class="modal-overlay" id="modal-reclassify">
+    <div class="modal">
+      <h3>🔄 Request Reclassification</h3>
+      <p>Flag this document for reclassification. A compliance officer will review it.</p>
+      <label>Reviewer ID *</label>
+      <input id="reclassify-reviewer" placeholder="Your employee ID or name" />
+      <label>Reason *</label>
+      <textarea id="reclassify-reason" rows="2" placeholder="Why is this classification wrong?"></textarea>
+      <label>Suggested Category (Optional)</label>
+      <input id="reclassify-category" placeholder="e.g. HR, Legal" />
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('modal-reclassify')">Cancel</button>
+        <button class="btn btn-reclassify" onclick="submitReclassify()">Request Reclassification</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legal Hold Modal -->
+  <div class="modal-overlay" id="modal-hold">
+    <div class="modal">
+      <h3>⚖️ Legal Hold</h3>
+      <p>Apply or remove a legal hold. While active, retain and deletion actions are blocked.</p>
+      <label>Reviewer ID *</label>
+      <input id="hold-reviewer" placeholder="Your employee ID or name" />
+      <label>Comments</label>
+      <textarea id="hold-comments" rows="2" placeholder="Reason for legal hold action…"></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('modal-hold')">Cancel</button>
+        <button class="btn btn-hold" id="btn-submit-hold" onclick="submitHold()">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Modal -->
+  <div class="modal-overlay" id="modal-upload">
+    <div class="modal">
+      <h3>📤 Upload Document</h3>
+      <p>Upload a new document. Azure AI will instantly analyze and classify it.</p>
+      <label>Select Document File *</label>
+      <input type="file" id="upload-file" accept=".pdf,.docx,.xlsx,.pptx,.jpg,.jpeg,.png,.tiff,.bmp" style="margin-bottom: 15px;" />
+      <div id="upload-spinner" class="spinner" style="display: none; margin: 0 auto 15px auto;"></div>
+      <p id="upload-status" style="text-align: center; color: var(--accent); display: none; font-size: 0.9rem; margin-bottom: 15px;">Uploading & Analyzing...</p>
+      <div class="modal-actions" id="upload-actions">
+        <button class="btn btn-secondary" onclick="closeModal('modal-upload')">Cancel</button>
+        <button class="btn btn-retain" onclick="submitUpload()">Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"></div>
+
+  <script>
+    const API = '/api/documents';
+    let selectedDocId = null;
+    let debounceTimer = null;
+
+    // ── Toast ─────────────────────────────────────────────────────────────────
+    function showToast(msg, type = 'success') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `show ${type}`;
+      clearTimeout(t._t);
+      t._t = setTimeout(() => { t.className = ''; }, 3500);
+    }
+
+    // ── Debounce ─────────────────────────────────────────────────────────────
+    function debounceLoad() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(loadQueue, 400);
+    }
+
+    // ── Load Queue ────────────────────────────────────────────────────────────
+    async function loadQueue() {
+      const status    = document.getElementById('filter-status').value;
+      const lifecycle = document.getElementById('filter-lifecycle').value;
+      const owner     = document.getElementById('filter-owner').value;
+      const rule      = document.getElementById('filter-rule').value.trim();
+      const minConf   = document.getElementById('filter-min-conf').value;
+      const maxConf   = document.getElementById('filter-max-conf').value;
+
+      let url = `${API}/review?page_size=100`;
+      if (status)    url += `&review_status=${encodeURIComponent(status)}`;
+      if (lifecycle) url += `&lifecycle_status=${encodeURIComponent(lifecycle)}`;
+      if (owner)     url += `&team_owner=${encodeURIComponent(owner)}`;
+      if (rule)      url += `&retention_rule=${encodeURIComponent(rule)}`;
+      if (minConf)   url += `&min_confidence=${encodeURIComponent(minConf)}`;
+      if (maxConf)   url += `&max_confidence=${encodeURIComponent(maxConf)}`;
+
+      const tbody = document.getElementById('queue-body');
+      tbody.innerHTML = '<tr><td colspan="6" class="loading"><div class="spinner"></div><br>Loading...</td></tr>';
+
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        document.getElementById('queue-count').textContent = data.total;
+        renderQueue(data.items || []);
+        await updateStats();
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state" style="color:var(--red)">Failed to load: ${e.message}</td></tr>`;
+      }
+    }
+
+    async function updateStats() {
+      try {
+        const res = await fetch(`${API}/stats`);
+        if (!res.ok) return;
+        const s = await res.json();
+        document.getElementById('stat-pending').textContent  = s.pending_review;
+        document.getElementById('stat-total').textContent    = s.total_documents;
+        document.getElementById('stat-approved').textContent = s.deletion_approved;
+        document.getElementById('stat-retained').textContent = s.retained;
+      } catch (e) {
+        console.error("Failed to load stats", e);
+      }
+    }
+
+    function renderQueue(items) {
+      const tbody = document.getElementById('queue-body');
+      if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No documents requiring review.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = items.map(item => {
+        const conf = item.confidence_score ?? 0;
+        const confClass = conf >= 0.85 ? 'conf-high' : conf >= 0.65 ? 'conf-med' : 'conf-low';
+        const lifecycle = (item.lifecycle_status || '').toLowerCase().replace(/ /g, '_').replace('eligible_for_review','eligible');
+        const rstatus = (item.review_status || 'pending').toLowerCase();
+        const holdTag = item.legal_hold ? '<span class="hold-badge">HOLD</span>' : '';
+        return `<tr onclick="selectDocument('${item.document_id}')" id="row-${item.document_id}">
+          <td title="${item.document_name}">${item.document_name}${holdTag}</td>
+          <td title="${item.document_type || ''}">${item.document_type || '—'}</td>
+          <td>${item.retention_rule || '—'}</td>
+          <td class="confidence ${confClass}">${(conf * 100).toFixed(0)}%</td>
+          <td><span class="badge-status s-${lifecycle}">${item.lifecycle_status || '—'}</span></td>
+          <td><span class="badge-status s-${rstatus}">${item.review_status || 'pending'}</span></td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ── Select Document ───────────────────────────────────────────────────────
+    async function selectDocument(docId) {
+      selectedDocId = docId;
+      // Highlight row
+      document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
+      const row = document.getElementById(`row-${docId}`);
+      if (row) row.classList.add('selected');
+
+      document.getElementById('detail-empty').style.display = 'none';
+      const body = document.getElementById('detail-body');
+      body.style.display = 'block';
+      body.innerHTML = '<div class="loading"><div class="spinner"></div><br>Loading details…</div>';
+
+      try {
+        const res = await fetch(`${API}/${docId}/review`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = await res.json();
+        renderDetail(d);
+      } catch (e) {
+        body.innerHTML = `<div style="color:var(--red);padding:1rem;font-size:.8rem">Failed to load details: ${e.message}</div>`;
+      }
+    }
+
+    function renderDetail(d) {
+      const conf = d.confidence_score ?? 0;
+      const confClass = conf >= 0.85 ? 'conf-high' : conf >= 0.65 ? 'conf-med' : 'conf-low';
+      const rstatus = (d.review_status || 'pending').toLowerCase();
+      const canAct = !['approved_deletion'].includes(rstatus);
+
+      const reasons = (d.review_reasons && d.review_reasons.length > 0)
+        ? `<div class="review-reasons">
+            <div class="reason-title">⚠ Review Required — Reasons</div>
+            <ul>${d.review_reasons.map(r => `<li>${r}</li>`).join('')}</ul>
+          </div>` : '';
+
+      const auditItems = (d.audit_history || []).map(a =>
+        `<div class="audit-item">
+          <span class="event-type">${a.event_type}</span>
+          <span class="event-time"> · ${a.created_at ? new Date(a.created_at).toLocaleString() : '—'}</span>
+          ${a.event_data ? `<pre style="margin-top:4px;font-size:.7rem;color:var(--muted);white-space:pre-wrap">${JSON.stringify(a.event_data, null, 2)}</pre>` : ''}
+        </div>`
+      ).join('');
+
+      const lifecycle = (d.lifecycle_status || '').toLowerCase().replace(/ /g,'_').replace('eligible_for_review','eligible');
+
+      document.getElementById('detail-body').innerHTML = `
+        <div class="detail-doc-name">${d.document_name}</div>
+        <div class="detail-doc-meta">${d.file_type?.toUpperCase() || 'PDF'} · ${d.page_count || 0} page(s) · Uploaded ${d.created_at ? new Date(d.created_at).toLocaleDateString() : '—'}</div>
+
+        ${reasons}
+
+        <div class="detail-section">
+          <div class="detail-section-title">Classification</div>
+          <div class="kv"><span class="k">Status</span><span class="v"><span class="badge-status s-${(d.classification_status||'').toLowerCase().replace('_','')}">${d.classification_status || '—'}</span></span></div>
+          <div class="kv"><span class="k">Confidence</span><span class="v confidence ${confClass}">${(conf * 100).toFixed(1)}%</span></div>
+          <div class="kv"><span class="k">Category</span><span class="v">${d.category || '—'}</span></div>
+          <div class="kv"><span class="k">Section</span><span class="v">${d.section || '—'}</span></div>
+          <div class="kv"><span class="k">Document Type</span><span class="v">${d.document_type || '—'}</span></div>
+          <div class="kv"><span class="k">Team Owner</span><span class="v">${d.team_owner || '—'}</span></div>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-section-title">Retention Schedule</div>
+          <div class="kv"><span class="k">Label</span><span class="v">${d.retention_label || '—'}</span></div>
+          <div class="kv"><span class="k">Period</span><span class="v">${d.retention_period || '—'}</span></div>
+          <div class="kv"><span class="k">Start Date</span><span class="v">${d.retention_start_date || '—'}</span></div>
+          <div class="kv"><span class="k">End Date</span><span class="v">${d.retention_end_date || '—'}</span></div>
+          <div class="kv"><span class="k">Lifecycle</span><span class="v"><span class="badge-status s-${lifecycle}">${d.lifecycle_status || '—'}</span></span></div>
+          <div class="kv"><span class="k">Next Action</span><span class="v">${d.next_action || '—'}</span></div>
+          <div class="kv"><span class="k">Trigger Condition</span><span class="v" style="font-size:.73rem;color:var(--muted)">${d.trigger_condition || '—'}</span></div>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-section-title">Review Status</div>
+          <div class="kv"><span class="k">Review Status</span><span class="v"><span class="badge-status s-${rstatus}">${d.review_status || 'pending'}</span></span></div>
+          <div class="kv"><span class="k">Review Required</span><span class="v">${d.review_required ? '✅ Yes' : '—'}</span></div>
+          <div class="kv"><span class="k">Legal Hold</span><span class="v">${d.legal_hold ? '<span class="hold-badge">ACTIVE</span>' : 'None'}</span></div>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn btn-retain"    ${canAct && !d.legal_hold ? '' : 'disabled'} onclick="openModal('modal-retain')">✅ Retain</button>
+          <button class="btn btn-delete"    ${canAct && !d.legal_hold ? '' : 'disabled'} onclick="openModal('modal-delete')">🗑 Approve Deletion</button>
+          <button class="btn btn-reclassify" ${rstatus === 'approved_deletion' ? 'disabled' : ''} onclick="openModal('modal-reclassify')">🔄 Reclassify</button>
+          <button class="btn btn-hold"      onclick="openHoldModal(${d.legal_hold})">⚖️ ${d.legal_hold ? 'Remove Hold' : 'Apply Hold'}</button>
+          <button class="btn btn-secondary" onclick="loadAudit()">📋 Audit</button>
+        </div>
+
+        <div class="detail-section" style="margin-top:1rem">
+          <div class="detail-section-title">Audit History</div>
+          <div class="audit-list" id="audit-list">
+            ${auditItems || '<div style="color:var(--muted);font-size:.78rem">No audit events yet.</div>'}
+          </div>
+        </div>
+      `;
+    }
+
+    async function loadAudit() {
+      if (!selectedDocId) return;
+      try {
+        const res = await fetch(`${API}/${selectedDocId}/audit`);
+        const data = await res.json();
+        const el = document.getElementById('audit-list');
+        if (!el) return;
+        el.innerHTML = (data.audit_events || []).map(a =>
+          `<div class="audit-item">
+            <span class="event-type">${a.event_type}</span>
+            <span class="event-time"> · ${a.created_at ? new Date(a.created_at).toLocaleString() : '—'}</span>
+            ${a.event_data ? `<pre style="margin-top:4px;font-size:.7rem;color:var(--muted);white-space:pre-wrap">${JSON.stringify(a.event_data, null, 2)}</pre>` : ''}
+          </div>`
+        ).join('') || '<div style="color:var(--muted);font-size:.78rem">No audit events.</div>';
+      } catch (e) {
+        showToast(`Failed to load audit: ${e.message}`, 'error');
+      }
+    }
+
+    // ── Modals ────────────────────────────────────────────────────────────────
+    let currentHoldAction = false;
+    function openModal(id)  { document.getElementById(id).classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+    function openHoldModal(isHoldActive) {
+      currentHoldAction = !isHoldActive;
+      document.getElementById('btn-submit-hold').textContent = currentHoldAction ? 'Apply Hold' : 'Remove Hold';
+      openModal('modal-hold');
+    }
+
+    async function submitRetain() {
+      const reviewer = document.getElementById('retain-reviewer').value.trim();
+      const comments = document.getElementById('retain-comments').value.trim();
+      if (!reviewer) { showToast('Reviewer ID is required.', 'error'); return; }
+
+      try {
+        const res = await fetch(`${API}/${selectedDocId}/review/retain`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reviewer_id: reviewer, comments }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+        closeModal('modal-retain');
+        showToast('Document retained successfully.', 'success');
+        await loadQueue();
+        await selectDocument(selectedDocId);
+      } catch (e) {
+        showToast(`Error: ${e.message}`, 'error');
+      }
+    }
+
+    async function submitDelete() {
+      const reviewer = document.getElementById('delete-reviewer').value.trim();
+      const comments = document.getElementById('delete-comments').value.trim();
+      if (!reviewer) { showToast('Reviewer ID is required.', 'error'); return; }
+      if (!comments) { showToast('Comments are required for deletion approval.', 'error'); return; }
+
+      try {
+        const res = await fetch(`${API}/${selectedDocId}/review/approve-deletion`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reviewer_id: reviewer, comments }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+        closeModal('modal-delete');
+        showToast('Deletion approved. Audit record created.', 'success');
+        await loadQueue();
+        await selectDocument(selectedDocId);
+      } catch (e) {
+        showToast(`Error: ${e.message}`, 'error');
+      }
+    }
+
+    async function submitReclassify() {
+      const reviewer = document.getElementById('reclassify-reviewer').value.trim();
+      const reason = document.getElementById('reclassify-reason').value.trim();
+      const category = document.getElementById('reclassify-category').value.trim();
+      if (!reviewer || !reason) { showToast('Reviewer ID and Reason are required.', 'error'); return; }
+
+      try {
+        const res = await fetch(`${API}/${selectedDocId}/review/reclassify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reviewer_id: reviewer, reason, suggested_category: category }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+        closeModal('modal-reclassify');
+        showToast('Reclassification requested.', 'success');
+        await loadQueue();
+        await selectDocument(selectedDocId);
+      } catch (e) {
+        showToast(`Error: ${e.message}`, 'error');
+      }
+    }
+
+    async function submitHold() {
+      const reviewer = document.getElementById('hold-reviewer').value.trim();
+      const comments = document.getElementById('hold-comments').value.trim();
+      if (!reviewer) { showToast('Reviewer ID is required.', 'error'); return; }
+
+      try {
+        const res = await fetch(`${API}/${selectedDocId}/legal-hold`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reviewer_id: reviewer, apply: currentHoldAction, comments }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+        closeModal('modal-hold');
+        showToast(`Legal hold ${currentHoldAction ? 'applied' : 'removed'}.`, 'success');
+        await loadQueue();
+        await selectDocument(selectedDocId);
+      } catch (e) {
+        showToast(`Error: ${e.message}`, 'error');
+      }
+    }
+    async function submitUpload() {
+      const fileInput = document.getElementById('upload-file');
+      if (!fileInput.files.length) {
+        showToast('Please select a PDF file.', 'error');
+        return;
+      }
+      
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      document.getElementById('upload-spinner').style.display = 'block';
+      document.getElementById('upload-status').style.display = 'block';
+      document.getElementById('upload-actions').style.display = 'none';
+      
+      try {
+        const res = await fetch(`${API}/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(data.error?.message || data.detail || res.statusText);
+        }
+        
+        showToast('Document analyzed and classified successfully!', 'success');
+        closeModal('modal-upload');
+        await loadQueue();
+        
+      } catch (e) {
+        showToast(`Error: ${e.message}`, 'error');
+      } finally {
+        document.getElementById('upload-spinner').style.display = 'none';
+        document.getElementById('upload-status').style.display = 'none';
+        document.getElementById('upload-actions').style.display = 'flex';
+        fileInput.value = '';
+      }
+    }
+
+
+    // Close modal on backdrop click
+    document.querySelectorAll('.modal-overlay').forEach(el => {
+      el.addEventListener('click', (e) => { if (e.target === el) el.classList.remove('open'); });
+    });
+
+    // Init
+    loadQueue();
+  </script>
+</body>
+</html>

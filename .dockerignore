@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.pyc
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Environment / secrets — NEVER bake into image
+.env
+*.env
+
+# Tests & cache
+.pytest_cache/
+tests/
+htmlcov/
+.coverage
+
+# Dev / IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Project docs / generator scripts
+AI_CONTEXT.md
+generate_context.py
+README.md
+docker-compose.yml
+deploy/
+
+# Git
+.git/
+.gitignore
+
+# Alembic cache
+alembic/__pycache__/
+alembic/versions/__pycache__/

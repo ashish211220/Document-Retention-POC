@@ -1,0 +1,19 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+python-multipart
+azure-ai-documentintelligence
+azure-search-documents>=11.4.0
+azure-core
+pydantic
+openai
+sqlalchemy
+asyncpg
+psycopg2-binary
+alembic
+aiofiles
+pytest
+
+# SharePoint Integration
+msal
+httpx
