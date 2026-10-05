@@ -62,3 +62,41 @@ If you share your screen, open folders in this order:
 2. `app/sync/scheduler.py` (Show the polling and skip logic)
 3. `app/services/classification_service.py` (Show the AI decision orchestration)
 4. `app/sync/sharepoint_sync.py` (Show how it writes safely back to Microsoft 365)
+
+## 5. File-by-File Execution Flow (Diagram)
+
+Use this diagram and explanation to show reviewers exactly how data passes between your Python modules.
+
+```mermaid
+sequenceDiagram
+    participant main as app/main.py
+    participant sched as app/sync/scheduler.py
+    participant intel as app/services/document_intelligence_service.py
+    participant und as app/services/document_understanding_service.py
+    participant class as app/services/classification_service.py
+    participant sp_sync as app/sync/sharepoint_sync.py
+    
+    main->>sched: 1. start_scheduler() (on boot)
+    loop Every 5 Minutes
+        sched->>sched: 2. Query SharePoint for new files
+        sched->>intel: 3. analyze_and_normalize_document()
+        intel-->>sched: Returns Extracted Text
+        
+        sched->>und: 4. analyze_document()
+        und-->>sched: Returns Context & Keywords
+        
+        sched->>class: 5. classify_document()
+        class-->>sched: Returns Final Retention Rule
+        
+        sched->>sp_sync: 6. push_to_sharepoint()
+        sp_sync-->>sched: Syncs Label/Metadata to SP
+    end
+```
+
+### The Journey of a Single Document
+1. **`app/main.py`**: The server boots and triggers `start_scheduler()`.
+2. **`app/sync/scheduler.py`**: The core conductor. It fetches the binary file from SharePoint and passes it down the AI assembly line.
+3. **`app/services/document_intelligence_service.py`**: Takes the binary PDF/Word file, reads it via OCR, and returns pure text to the scheduler.
+4. **`app/services/document_understanding_service.py`**: Takes the pure text, sends it to Azure OpenAI, and returns structured data (Title, Summary, Keywords).
+5. **`app/services/classification_service.py`**: Takes the structured data, searches the taxonomy in Azure AI Search, has OpenAI pick the best match, and returns the final Retention Decision.
+6. **`app/sync/sharepoint_sync.py`**: The scheduler takes the final Retention Decision and passes it here to safely PATCH the Microsoft Graph API, locking the document as a record.
