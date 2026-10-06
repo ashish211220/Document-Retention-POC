@@ -1,16 +1,3 @@
-"""
-Azure OpenAI client wrapper for the Document Retention System.
-
-Handles:
-- Client initialization (Azure OpenAI endpoint)
-- Chat completion with structured JSON output
-- Prompt truncation to avoid context window limits
-- Response parsing and error handling
-
-NOTE: The endpoint in .env may be a full URL including deployment path.
-We extract the base endpoint and use deployment name separately for SDK compatibility.
-"""
-
 import json
 import re
 from typing import Optional
@@ -30,12 +17,6 @@ MAX_CONTENT_CHARS = 8000
 
 
 def _get_base_endpoint(endpoint: str) -> str:
-    """
-    Extract the base Azure OpenAI endpoint URL.
-    Handles both:
-      - Clean: https://my-resource.openai.azure.com/
-      - Full path: https://my-resource.openai.azure.com/openai/deployments/gpt-4.1/chat/...
-    """
     match = re.match(r"(https://[^/]+\.openai\.azure\.com/?)", endpoint)
     if match:
         return match.group(1).rstrip("/") + "/"
@@ -54,17 +35,6 @@ def _get_client() -> AzureOpenAI:
 def chat_completion(
     system_prompt: str, user_prompt: str, temperature: float = 0.1
 ) -> Optional[str]:
-    """
-    Send a chat completion request to Azure OpenAI and return the raw response text.
-
-    Args:
-        system_prompt: Instructions for the model (role + output format).
-        user_prompt: The actual content/question to process.
-        temperature: Low temperature (0.1) for deterministic, structured responses.
-
-    Returns:
-        Raw string response from the model, or None on failure.
-    """
     client = _get_client()
     try:
         response = client.chat.completions.create(
@@ -88,10 +58,7 @@ def chat_completion(
 
 
 def parse_json_response(raw: str) -> dict:
-    """
-    Parse the model's JSON response string into a Python dict.
-    Handles common formatting issues like markdown code fences.
-    """
+   
     raw = raw.strip()
     if raw.startswith("```"):
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
