@@ -1,14 +1,3 @@
-"""
-Azure AI Search client and operations for the Retention Taxonomy index.
-
-This module handles:
-- SearchClient initialization
-- Index creation (schema definition)
-- Document upload / upsert
-- Keyword search
-- Hybrid search (keyword + semantic) — Phase 4 ready
-"""
-
 from typing import List, Optional
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
@@ -114,10 +103,7 @@ INDEX_FIELDS = [
 
 
 def create_index_if_not_exists() -> bool:
-    """
-    Create the retention taxonomy index in Azure AI Search.
-    Returns True if index was created, False if it already existed.
-    """
+   
     client = _get_index_client()
     existing = [
         idx if isinstance(idx, str) else idx.name for idx in client.list_index_names()
@@ -159,10 +145,7 @@ import re
 
 
 def _parse_retention_rule(rule: str) -> tuple:
-    """
-    Parses a combined retention_rule (e.g., 'FE-5', 'AC+10', '3 MONTHS', 'AV')
-    into (retention_code, retention_period, retention_period_unit).
-    """
+   
     rule = (rule or "").strip().upper()
 
     month_match = re.search(r"(\d+)\s*MONTHS?", rule)
@@ -182,11 +165,7 @@ def _parse_retention_rule(rule: str) -> tuple:
 
 
 def upload_taxonomy_documents(records: List[dict]) -> int:
-    """
-    Upload (merge-or-upload) taxonomy records into the search index.
-    Records should already be in the flat dict format (no nested lists for keywords).
-    Returns the number of successfully uploaded documents.
-    """
+    
     client = _get_search_client()
 
     docs = []
@@ -231,17 +210,7 @@ def upload_taxonomy_documents(records: List[dict]) -> int:
 def hybrid_search(
     query: str, top_k: int = 5, filter_expr: Optional[str] = None
 ) -> List[dict]:
-    """
-    Hybrid search (keyword + vector) over the retention taxonomy index.
-
-    Args:
-        query: Free-text search query.
-        top_k: Maximum number of results to return.
-        filter_expr: Optional OData filter.
-
-    Returns:
-        List of matching taxonomy record dicts.
-    """
+    
     client = _get_search_client()
 
     try:
@@ -285,17 +254,6 @@ def hybrid_search(
 def keyword_search(
     query: str, top_k: int = 5, filter_expr: Optional[str] = None
 ) -> List[dict]:
-    """
-    Full-text keyword search over the retention taxonomy index.
-
-    Args:
-        query: Free-text search query.
-        top_k: Maximum number of results to return.
-        filter_expr: Optional OData filter (e.g. "classification eq 'Confidential'").
-
-    Returns:
-        List of matching taxonomy record dicts with a `@search.score` field.
-    """
     client = _get_search_client()
     results = client.search(
         search_text=query,
@@ -323,16 +281,7 @@ def keyword_search(
 
 
 def filter_search(filter_expr: str, top_k: int = 10) -> List[dict]:
-    """
-    Filter-only search (no text scoring) — useful for looking up by owner or classification.
-
-    Args:
-        filter_expr: OData filter expression
-            e.g. "team_owner eq 'HR'" or "classification eq 'Confidential'"
-
-    Returns:
-        List of matching taxonomy record dicts.
-    """
+    
     client = _get_search_client()
     results = client.search(
         search_text="*",
