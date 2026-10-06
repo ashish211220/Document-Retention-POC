@@ -156,20 +156,7 @@ class AuditLog(Base):
 
 
 class SharePointSyncLog(Base):
-    """
-    Operational/technical log for each SharePoint sync attempt.
-
-    Tracks each of the (up to) four write steps independently so that partial
-    failures are retryable without re-running classification or duplicating rows.
-
-    sync_type values:
-      'metadata_columns'   — PATCH driveItem fields on POC_Source_Documents
-      'retention_label'    — PATCH /retentionLabel on the driveItem (Purview)
-      'retention_list_item' — POST/PATCH row in POC_Documents_Retention list
-      'audit_log_entry'    — POST row in POC_classification_auditlog list
-
-    status values: 'success' | 'failed' | 'retrying'
-    """
+   
 
     __tablename__ = "sharepoint_sync_logs"
 

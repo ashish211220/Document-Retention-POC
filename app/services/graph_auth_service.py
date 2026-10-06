@@ -1,24 +1,3 @@
-"""
-Graph Auth Service — Client Credentials (Application) flow.
-
-Since Sites.ReadWrite.All is configured as an Application permission (not Delegated),
-the app authenticates directly using its own Client ID + Secret. No user sign-in,
-no device code, no browser redirect is needed.
-
-Token acquisition:
-  - Uses msal.ConfidentialClientApplication with acquire_token_for_client().
-  - Scope must be "https://graph.microsoft.com/.default" (not the individual permission
-    string) — this tells AAD to issue a token for all Application permissions that have
-    been granted admin consent on the app registration.
-  - MSAL caches the token in memory and returns a cached token on subsequent calls
-    until it expires (typically 1 hour), at which point it silently re-acquires.
-
-Required environment variables:
-  SHAREPOINT_CLIENT_ID     — App Registration Application (client) ID
-  SHAREPOINT_CLIENT_SECRET — Client secret created in the App Registration
-  SHAREPOINT_TENANT_ID     — Directory (tenant) ID
-"""
-
 import logging
 import msal
 from app.config import (

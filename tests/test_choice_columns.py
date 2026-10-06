@@ -1,13 +1,4 @@
-"""
-Unit tests for:
-  - DocumentTaggedStatus / DeletionStatus enums and validate_choice_value
-  - AUTO_TAG_CONFIDENCE_THRESHOLD routing (determine_status / determine_document_tagged_status)
-  - SharePoint sync payload: DocumentTagged and isDeleted choice values
-  - Ownership guards: human values not overwritten on PATCH
-  - isDeleted never in PATCH payload
-  - Threshold boundary: 59.9, 60, 60.1 on both 0-1 and 0-100 inputs
-  - ENV-driven threshold change without code edit
-"""
+
 import os
 import sys
 import types

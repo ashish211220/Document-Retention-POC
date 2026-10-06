@@ -1,20 +1,3 @@
-"""
-Unit tests for app/sync/sharepoint_sync.py.
-
-All Graph API calls are mocked — no real SharePoint connection required.
-These tests can run while admin consent for Sites.FullControl.All is pending.
-
-Coverage:
-  1. Full happy path — all 4 steps succeed, DB fields updated correctly.
-  2. Partial failure — Step 2 fails, Steps 1/3/4 succeed; SyncResult reflects failure.
-  3. Retry logic — second run skips already-succeeded steps, only retries failed ones.
-  4. Reclassification — existing list item is PATCHed, not POSTed (no duplicate row).
-  5. Ownership guard — isDeleted=True and Deletion_Approved_By set by human are never
-     overwritten by our backend on resync.
-  6. Purview label idempotency — Step 1 skipped when purview_label_applied=True.
-  7. No retention_code — Step 1 gracefully skipped, rest of sync continues.
-"""
-
 import asyncio
 import pytest
 import uuid

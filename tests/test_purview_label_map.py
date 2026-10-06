@@ -1,19 +1,3 @@
-"""
-tests/test_purview_label_map.py
-
-Unit tests for the Purview label map integration as specified in the task:
-
-  1. AL -> AL_V1 in the retentionLabel API call; metadata columns still get raw "AL".
-  2. PM -> "Forever" in the API call.
-  3. CE (label_not_found): mock 400 from Graph -> caught as LabelNotFoundError,
-     logged with [label_not_found] prefix, does NOT raise, does NOT set
-     purview_label_applied=True, steps 2-4 still complete.
-  4. Retry: CE document that previously failed label_not_found; Graph now
-     succeeds -> label applied, purview_label_applied=True, no re-classification.
-
-All Graph calls are mocked. No live SharePoint connection required.
-"""
-
 import sys
 import types
 import uuid

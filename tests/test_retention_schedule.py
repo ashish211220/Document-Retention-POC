@@ -1,13 +1,3 @@
-"""
-Extended Retention Schedule Tests.
-
-Tests all retention rule codes from the approved Exhibit A Legend:
-  AL, AV, YE, FE, Permanent, CD, UO, US, AD, LA
-  - With and without +N year suffix
-  - Standalone codes requiring human review
-  - FE vs YE distinction (fiscal vs calendar year-end)
-  - Missing dates, invalid inputs
-"""
 from datetime import date
 from app.services.retention_schedule_service import calculate_retention_schedule
 

@@ -1,15 +1,3 @@
-"""
-Validation Service.
-
-Validates the AI's selected classification candidate against the approved
-in-memory retention taxonomy (loaded from retention_taxonomy.json).
-
-CRITICAL BUSINESS RULE:
-  The AI may only select from candidates explicitly retrieved from the approved
-  taxonomy. This service enforces that rule by verifying the selected candidate
-  ID actually exists in the taxonomy before accepting the classification.
-"""
-
 from typing import Optional, Tuple
 from app.models.classification import ClassificationCandidate
 from app.models.retention import RetentionRecord

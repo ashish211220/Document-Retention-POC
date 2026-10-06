@@ -1,15 +1,3 @@
-"""
-Unit tests for the document_number sequential ID feature.
-
-Covers:
-  - Two new documents get consecutive numbers starting at 101
-  - Reclassification / retry keeps the original number
-  - A skipped (already-processed) file does not consume a new number
-  - format_document_id returns an integer
-  - Retention list payload sends DocumentID as integer
-  - Audit log payload uses the same number as the retention list
-  - Duplicate-detection filter uses numeric comparison (no quotes)
-"""
 import sys
 import types
 import pytest

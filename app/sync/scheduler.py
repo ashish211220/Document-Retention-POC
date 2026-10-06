@@ -1,8 +1,3 @@
-"""
-Background Polling Scheduler
-Automatically processes documents from SharePoint.
-"""
-
 import asyncio
 import logging
 import uuid
