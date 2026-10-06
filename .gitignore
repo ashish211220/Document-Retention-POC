@@ -36,4 +36,5 @@ Azure DB.session.sql
 # AI Context and Review Guides (Keep Local)
 CODE_REVIEW_GUIDE.md
 AI_CONTEXT.md
+generate_context.py
 .gemini/
