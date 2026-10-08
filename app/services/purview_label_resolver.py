@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-_LABELS_PATH = Path(__file__).parent / "purview_labels.json"
+_LABELS_PATH = Path(__file__).parent.parent / "purview_labels.json"
 
 def _load_per_rule_map() -> dict[str, str]:
     with open(_LABELS_PATH, encoding="utf-8") as f:
