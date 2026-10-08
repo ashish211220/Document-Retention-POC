@@ -1,0 +1,37 @@
+Label Name,Retention Period,Period Unit,Start of Retention,Action After Retention,Description
+2 months,2,Months,When document was created,Trigger a disposition review,Retain for 2 months
+6 months,6,Months,When document was created,Trigger a disposition review,Retain for 6 months
+AD,0,Years,Event (After Disposition),Trigger a disposition review,Review immediately upon Event (After Disposition)
+AD+3,3,Years,Event (After Disposition),Trigger a disposition review,Retain for 3 years after Event (After Disposition)
+AL,0,Years,Event (After Life/Conclusion),Trigger a disposition review,Review immediately upon Event (After Life/Conclusion)
+AL+1,1,Years,Event (After Life/Conclusion),Trigger a disposition review,Retain for 1 years after Event (After Life/Conclusion)
+AL+2,2,Years,Event (After Life/Conclusion),Trigger a disposition review,Retain for 2 years after Event (After Life/Conclusion)
+AL+20,20,Years,Event (After Life/Conclusion),Trigger a disposition review,Retain for 20 years after Event (After Life/Conclusion)
+AL+3,3,Years,Event (After Life/Conclusion),Trigger a disposition review,Retain for 3 years after Event (After Life/Conclusion)
+AL+4,4,Years,Event (After Life/Conclusion),Trigger a disposition review,Retain for 4 years after Event (After Life/Conclusion)
+AL+5,5,Years,Event (After Life/Conclusion),Trigger a disposition review,Retain for 5 years after Event (After Life/Conclusion)
+AL+6,6,Years,Event (After Life/Conclusion),Trigger a disposition review,Retain for 6 years after Event (After Life/Conclusion)
+AL+7,7,Years,Event (After Life/Conclusion),Trigger a disposition review,Retain for 7 years after Event (After Life/Conclusion)
+AL+75,75,Years,Event (After Life/Conclusion),Trigger a disposition review,Retain for 75 years after Event (After Life/Conclusion)
+AV,0,Years,Event (Administratively Valuable),Trigger a disposition review,Review immediately upon Event (Administratively Valuable)
+AV+1,1,Years,Event (Administratively Valuable),Trigger a disposition review,Retain for 1 years after Event (Administratively Valuable)
+CD+1,1,Years,Event (Contract/Closing Date),Trigger a disposition review,Retain for 1 years after Event (Contract/Closing Date)
+CE+1,1,Years,End of Calendar Year,Trigger a disposition review,Retain for 1 years after End of Calendar Year
+FE,0,Years,End of Fiscal Year,Trigger a disposition review,Review immediately upon End of Fiscal Year
+FE+1,1,Years,End of Fiscal Year,Trigger a disposition review,Retain for 1 years after End of Fiscal Year
+FE+2,2,Years,End of Fiscal Year,Trigger a disposition review,Retain for 2 years after End of Fiscal Year
+FE+3,3,Years,End of Fiscal Year,Trigger a disposition review,Retain for 3 years after End of Fiscal Year
+FE+4,4,Years,End of Fiscal Year,Trigger a disposition review,Retain for 4 years after End of Fiscal Year
+FE+5,5,Years,End of Fiscal Year,Trigger a disposition review,Retain for 5 years after End of Fiscal Year
+FE+6,6,Years,End of Fiscal Year,Trigger a disposition review,Retain for 6 years after End of Fiscal Year
+FE+7,7,Years,End of Fiscal Year,Trigger a disposition review,Retain for 7 years after End of Fiscal Year
+LA,0,Years,Event (Life of Asset),Trigger a disposition review,Review immediately upon Event (Life of Asset)
+LA+3,3,Years,Event (Life of Asset),Trigger a disposition review,Retain for 3 years after Event (Life of Asset)
+Permanent,0,Years,Never (Permanent),Retain items forever,Retain Forever (Permanent)
+UO+5,5,Years,Event (Until Obsolete),Trigger a disposition review,Retain for 5 years after Event (Until Obsolete)
+US,0,Years,Event (Until Superseded),Trigger a disposition review,Review immediately upon Event (Until Superseded)
+US+10,10,Years,Event (Until Superseded),Trigger a disposition review,Retain for 10 years after Event (Until Superseded)
+US+3,3,Years,Event (Until Superseded),Trigger a disposition review,Retain for 3 years after Event (Until Superseded)
+US+4,4,Years,Event (Until Superseded),Trigger a disposition review,Retain for 4 years after Event (Until Superseded)
+US+5,5,Years,Event (Until Superseded),Trigger a disposition review,Retain for 5 years after Event (Until Superseded)
+YE+3,3,Years,End of Year,Trigger a disposition review,Retain for 3 years after End of Year

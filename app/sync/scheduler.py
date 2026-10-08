@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 
+
 _poll_lock = asyncio.Lock()  # Only one poll cycle at a time
 _shutdown_event = asyncio.Event()  # Set on app shutdown to cleanly break the loop
 

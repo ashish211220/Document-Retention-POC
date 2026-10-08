@@ -44,18 +44,25 @@ MAX_PROCESSING_RETRIES = int(os.getenv("MAX_PROCESSING_RETRIES", "3"))
 SYNC_BATCH_CONCURRENCY = int(os.getenv("SYNC_BATCH_CONCURRENCY", "3"))
 
 
+# Legacy base-code map — kept for PURVIEW_LABEL_STRATEGY=base_code rollback only
 PURVIEW_LABEL_NAME_MAP: dict[str, str] = {
-    "AL": "AL_V1",  # Confirm AL_V1 vs AL_V2 has 'Mark items as a record' in Purview portal
+    "AL": "AL_V1",
     "AV": "AV_V1",
     "FE": "FE_V1",
     "LA": "LA_V1",
     "US": "US_V1",
-    "CE": "CE_V1",  # NOT YET CREATED in Purview — will cause label_not_found on sync
-    "AC": "AC_V1",  # NOT YET CREATED in Purview — will cause label_not_found on sync
+    "CE": "CE_V1",
+    "AC": "AC_V1",
     "PM": "Forever",
 }
-
 PURVIEW_LABEL_MAPPING = PURVIEW_LABEL_NAME_MAP
+
+# 'per_rule' = look up FE+2 etc. from app/purview_labels.json (default)
+# 'base_code' = old behavior: look up FE, AL, etc. from PURVIEW_LABEL_NAME_MAP above
+PURVIEW_LABEL_STRATEGY = os.getenv("PURVIEW_LABEL_STRATEGY", "per_rule").lower()
+
+# When True, falls back to base_code label if per_rule mapping is missing (testing only)
+ALLOW_BASE_CODE_FALLBACK = os.getenv("ALLOW_BASE_CODE_FALLBACK", "false").lower() == "true"
 
 
 def validate_config():

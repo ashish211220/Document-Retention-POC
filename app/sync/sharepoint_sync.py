@@ -7,12 +7,15 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import (
+    ALLOW_BASE_CODE_FALLBACK,
     PURVIEW_LABEL_NAME_MAP,
+    PURVIEW_LABEL_STRATEGY,
     SHAREPOINT_AUDITLOG_LIST_ID,
     SHAREPOINT_RETENTION_LIST_ID,
     SHAREPOINT_SITE_ID,
     SHAREPOINT_SOURCE_DRIVE_ID,
 )
+from app.services.purview_label_resolver import normalize_retention_rule, resolve_purview_label
 from app.models.db_models import ClassificationRecord, SharePointSyncLog
 from app.models.sharepoint_enums import (
     DocumentTaggedStatus,
@@ -28,13 +31,23 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 class LabelNotFoundError(Exception):
 
-    def __init__(self, label_name: str, retention_code: str, raw_message: str):
+    def __init__(self, label_name: str, retention_rule: str, raw_message: str):
         self.label_name = label_name
-        self.retention_code = retention_code
+        self.retention_rule = retention_rule
         self.raw_message = raw_message
         super().__init__(
-            f"Purview label '{label_name}' (for retention_code='{retention_code}') not found "
-            f"in tenant. Label not yet created in Purview. Raw: {raw_message}"
+            f"Purview label '{label_name}' (for retention_rule='{retention_rule}') not found "
+            f"in tenant. Label not yet published in Purview. Raw: {raw_message}"
+        )
+
+
+class NoLabelMappingError(Exception):
+    # Raised when the retention_rule has no entry in purview_labels.json
+    def __init__(self, retention_rule: str):
+        self.retention_rule = retention_rule
+        super().__init__(
+            f"No Purview label mapping found for retention_rule='{retention_rule}'. "
+            f"Add it to app/purview_labels.json."
         )
 
 
@@ -147,15 +160,36 @@ async def _graph_get(token: str, url: str) -> Dict[str, Any]:
 class _RealGraphClient:
 
     async def patch_retention_label(
-        self, token: str, drive_id: str, item_id: str, retention_code: str
+        self, token: str, drive_id: str, item_id: str, retention_rule: str
     ) -> Dict:
-
-        if retention_code not in PURVIEW_LABEL_NAME_MAP:
-            raise KeyError(
-                f"retention_code '{retention_code}' has no entry in PURVIEW_LABEL_NAME_MAP. "
-                f"Add it to app/config.py before syncing."
-            )
-        purview_label_name = PURVIEW_LABEL_NAME_MAP[retention_code]
+        # Resolve label name from the full rule (e.g. 'FE+2') using the active strategy
+        if PURVIEW_LABEL_STRATEGY == "base_code":
+            # Legacy: derive from base code only
+            import re
+            m = re.match(r"^([A-Za-z]+)", (retention_rule or "").strip())
+            base = m.group(1).upper() if m else ""
+            if base not in PURVIEW_LABEL_NAME_MAP:
+                raise NoLabelMappingError(retention_rule)
+            purview_label_name = PURVIEW_LABEL_NAME_MAP[base]
+        else:
+            # Default per_rule strategy
+            purview_label_name = resolve_purview_label(retention_rule)
+            if purview_label_name is None:
+                if ALLOW_BASE_CODE_FALLBACK:
+                    import re
+                    m = re.match(r"^([A-Za-z]+)", (retention_rule or "").strip())
+                    base = m.group(1).upper() if m else ""
+                    fallback = PURVIEW_LABEL_NAME_MAP.get(base)
+                    if fallback:
+                        logger.warning(
+                            f"[ALLOW_BASE_CODE_FALLBACK] No per_rule mapping for '{retention_rule}'. "
+                            f"Falling back to base label '{fallback}'. THIS IS FOR TESTING ONLY."
+                        )
+                        purview_label_name = fallback
+                    else:
+                        raise NoLabelMappingError(retention_rule)
+                else:
+                    raise NoLabelMappingError(retention_rule)
 
         url = f"{GRAPH_BASE}/drives/{drive_id}/items/{item_id}/retentionLabel"
         headers = {
@@ -171,12 +205,12 @@ class _RealGraphClient:
             if resp.status_code == 400:
                 raw = resp.text
                 logger.warning(
-                    f"Purview label '{purview_label_name}' not found — label not yet created "
-                    f"in Purview. Raw response: {raw}"
+                    f"Purview label '{purview_label_name}' not found in tenant — "
+                    f"label not yet published. Raw response: {raw}"
                 )
                 raise LabelNotFoundError(
                     label_name=purview_label_name,
-                    retention_code=retention_code,
+                    retention_rule=retention_rule,
                     raw_message=raw,
                 )
 
@@ -189,7 +223,7 @@ class _RealGraphClient:
             try:
                 return resp.json()
             except Exception:
-                return {}
+                return {"_resolved_label": purview_label_name}
 
     async def patch_metadata_columns(
         self, token: str, site_id: str, drive_id: str, item_id: str, fields: Dict
@@ -302,19 +336,23 @@ async def sync_classification_to_sharepoint(
         )
         result.steps_succeeded.append(step)
 
-    elif payload.retention_code:
-        purview_label_name = PURVIEW_LABEL_NAME_MAP.get(
-            payload.retention_code, "<unmapped>"
+    elif payload.retention_rule:
+        resolved_label = resolve_purview_label(payload.retention_rule) if PURVIEW_LABEL_STRATEGY == "per_rule" else PURVIEW_LABEL_NAME_MAP.get(payload.retention_code or "", "<unmapped>")
+        logger.info(
+            f"[Sync] Step 1 — doc #{payload.document_number} | "
+            f"retention_rule='{payload.retention_rule}' | "
+            f"resolved_label='{resolved_label}' | "
+            f"strategy='{PURVIEW_LABEL_STRATEGY}'"
         )
         try:
             await graph.patch_retention_label(
-                token, drive_id, item_id, payload.retention_code
+                token, drive_id, item_id, payload.retention_rule
             )
             await _log_sync(db, payload.classification_record_id, step, "success")
             result.steps_succeeded.append(step)
             logger.info(
-                f"[Sync] Step 1 OK — Purview label '{purview_label_name}' "
-                f"(retention_code='{payload.retention_code}') applied to item {item_id}"
+                f"[Sync] Step 1 OK — Purview label '{resolved_label}' "
+                f"(retention_rule='{payload.retention_rule}') applied to item {item_id}"
             )
 
             cls_record = await db.get(
@@ -325,14 +363,30 @@ async def sync_classification_to_sharepoint(
                 cls_record.purview_label_applied_at = datetime.now(timezone.utc)
                 await db.flush()
 
+        except NoLabelMappingError as nme:
+            err = str(nme)
+            logger.error(
+                f"[Sync] Step 1 FAILED (no_label_mapping) — "
+                f"No mapping for rule '{nme.retention_rule}' in app/purview_labels.json. "
+                f"Add the mapping or create the label in Purview, then retry."
+            )
+            await _log_sync(
+                db,
+                payload.classification_record_id,
+                step,
+                "failed",
+                error_message=err,
+                error_type="no_label_mapping",
+            )
+            result.steps_failed.append(step)
+            result.errors[step] = err
+
         except LabelNotFoundError as lnf:
             err = str(lnf)
             logger.error(
                 f"[Sync] Step 1 FAILED (label_not_found) — "
-                f"Purview label '{lnf.label_name}' not found. "
-                f"Document {payload.classification_record_id} left unlabeled. "
-                f"Create '{lnf.label_name}' in the Purview portal and the next "
-                f"retry will succeed automatically."
+                f"Purview label '{lnf.label_name}' not yet published in tenant. "
+                f"Publish it in the Purview portal; the next retry will apply it automatically."
             )
             await _log_sync(
                 db,
@@ -356,7 +410,7 @@ async def sync_classification_to_sharepoint(
 
     else:
         logger.warning(
-            f"[Sync] Step 1 skipped — no retention_code on payload. Purview label not applied."
+            f"[Sync] Step 1 skipped — no retention_rule on payload. Purview label not applied."
         )
 
     step = "metadata_columns"
