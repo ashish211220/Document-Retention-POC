@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import (
@@ -97,6 +98,7 @@ async def _find_cls_record_by_doc_number(
         select(ClassificationRecord)
         .join(DocumentRecord, ClassificationRecord.document_id == DocumentRecord.id)
         .where(DocumentRecord.document_number == document_number)
+        .options(selectinload(ClassificationRecord.document))
     )
     result = await db.execute(stmt)
     return result.scalars().first()
@@ -229,9 +231,11 @@ async def _apply_one_reviewed_item(
             cls_record.ai_confidence_score = cls_record.confidence_score
 
     # --- Build SyncPayload (reuses the existing four-step sync) ---
+    # Use Title from the retention list row — avoids async lazy-load of the relationship
+    doc_name = fields.get("Title") or str(document_number)
     payload = SyncPayload(
         classification_record_id=cls_record.id,
-        document_name=cls_record.document.name if cls_record.document else str(document_number),
+        document_name=doc_name,
         document_type=effective_doc_type,
         category=tax_record.category,
         section=tax_record.section,
