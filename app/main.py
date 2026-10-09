@@ -2,10 +2,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
-from app.api import documents
 from app.api import sharepoint
 from app.services.metadata_service import load_taxonomy
 
@@ -49,7 +46,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
 app.include_router(sharepoint.router, prefix="/api/sharepoint", tags=["SharePoint"])
 
 app.add_middleware(
@@ -60,12 +56,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory="app/static", html=True), name="static")
-
-
-@app.get("/", include_in_schema=False)
-async def root_redirect():
-    return RedirectResponse(url="/static/index.html")
 
 
 @app.get("/health", tags=["Health"])
