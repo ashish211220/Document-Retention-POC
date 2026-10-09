@@ -461,7 +461,7 @@ async def sync_classification_to_sharepoint(
 
             update_fields: Dict[str, Any] = {
                 "ClassificationStatus": payload.classification_status,
-                "DocumentCategory": payload.category,
+                "DocumentType": payload.document_type,
                 "RetentionRule": payload.retention_rule,
                 "RetentionCode": payload.retention_code,
                 "ExpirationDate": payload.retention_end_date,
@@ -524,7 +524,7 @@ async def sync_classification_to_sharepoint(
                     else None
                 ),
                 "ClassificationStatus": payload.classification_status,
-                "DocumentCategory": payload.category,
+                "DocumentType": payload.document_type,
                 "RetentionRule": payload.retention_rule,
                 "RetentionCode": payload.retention_code,
                 "ExpirationDate": payload.retention_end_date,
