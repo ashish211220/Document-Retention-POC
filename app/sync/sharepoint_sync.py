@@ -80,9 +80,10 @@ class SyncPayload:
         ],  # existing POC_Documents_Retention row ID
         sharepoint_web_url: Optional[str],  # webUrl for Document_Location
         purview_label_applied: bool,
-        triggered_by: str = "system",  # e.g. "system", "reviewer@org.com"
-        audit_action: str = "classified",  # e.g. "classified", "reclassified", "legal_hold_applied"
+        triggered_by: str = "system",
+        audit_action: str = "classified",
         audit_notes: Optional[str] = None,
+        force_purview_label: bool = False,  # Human review: always apply label
     ):
         self.classification_record_id = classification_record_id
         self.document_name = document_name
@@ -104,6 +105,7 @@ class SyncPayload:
         self.triggered_by = triggered_by
         self.audit_action = audit_action
         self.audit_notes = audit_notes
+        self.force_purview_label = force_purview_label
 
 
 class SyncResult:
@@ -329,7 +331,7 @@ async def sync_classification_to_sharepoint(
         )
         result.steps_succeeded.append(step)
 
-    elif payload.classification_status != "auto_approved":
+    elif payload.classification_status != "auto_approved" and not payload.force_purview_label:
         logger.info(
             f"[Sync] Step 1 skipped — Document is pending review (Confidence < Threshold). "
             f"Purview label will NOT be applied yet."

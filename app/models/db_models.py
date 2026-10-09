@@ -96,6 +96,15 @@ class ClassificationRecord(Base):
     processing_attempts = Column(Integer, default=0, nullable=False)
     document_tagged_status = Column(String, nullable=True)
     deletion_status = Column(String, nullable=True, default="Not Deleted")
+    # Human review write-back tracking
+    classified_by = Column(String, nullable=True, default="ai")  # 'ai' | 'human'
+    reviewer = Column(String, nullable=True)                     # last modifier from Graph
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    review_applied_version = Column(String, nullable=True)       # lastModifiedDateTime snapshot
+    review_applied_at = Column(DateTime(timezone=True), nullable=True)
+    ai_proposed_category = Column(String, nullable=True)         # original AI category, never overwritten
+    ai_confidence_score = Column(Float, nullable=True)           # original AI score, never overwritten
+    content_changed_after_review = Column(Boolean, default=False, nullable=False)
 
     document = relationship("DocumentRecord", back_populates="classification")
     sync_logs = relationship(

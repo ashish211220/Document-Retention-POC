@@ -43,6 +43,17 @@ SYNC_POLL_INTERVAL_MINUTES = int(os.getenv("SYNC_POLL_INTERVAL_MINUTES", "5"))
 MAX_PROCESSING_RETRIES = int(os.getenv("MAX_PROCESSING_RETRIES", "3"))
 SYNC_BATCH_CONCURRENCY = int(os.getenv("SYNC_BATCH_CONCURRENCY", "3"))
 
+# --- Human review write-back ---
+REVIEW_SYNC_ENABLED = os.getenv("REVIEW_SYNC_ENABLED", "true").lower() == "true"
+REVIEW_SETTLE_SECONDS = int(os.getenv("REVIEW_SETTLE_SECONDS", "60"))
+REVIEW_HUMAN_CONFIDENCE = float(os.getenv("REVIEW_HUMAN_CONFIDENCE", "100"))
+# Retention-list column names written by Himank's Power App
+REVIEW_LIST_TAGGED_COL = "DocumentTagged"
+REVIEW_LIST_TAGGED_DETECT = "Reviewed"          # value that triggers write-back
+REVIEW_LIST_TAGGED_DONE = "Manually Tagged"      # value backend sets when done
+REVIEW_LIST_DOC_TYPE_COL = "DocumentType"        # reviewer's chosen document type
+REVIEW_LIST_RETENTION_RULE_COL = "RetentionRule" # reviewer's chosen rule e.g. AL+3
+
 
 # Legacy base-code map — kept for PURVIEW_LABEL_STRATEGY=base_code rollback only
 PURVIEW_LABEL_NAME_MAP: dict[str, str] = {

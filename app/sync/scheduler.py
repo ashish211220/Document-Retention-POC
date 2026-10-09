@@ -587,6 +587,15 @@ async def _scheduler_loop() -> None:
                 else:
                     try:
                         token = graph_auth_service.get_access_token()
+
+                        from app.config import REVIEW_SYNC_ENABLED
+                        if REVIEW_SYNC_ENABLED:
+                            from app.sync.review_writeback import run_review_writeback
+                            async with async_session() as db:
+                                wb_result = await run_review_writeback(token, db)
+                                if wb_result.get("applied", 0) > 0 or wb_result.get("error", 0) > 0:
+                                    logger.info(f"[Scheduler] Review write-back: {wb_result}")
+
                         await _run_poll_cycle(token)
 
                         from app.sync.sharepoint_sync import retry_failed_syncs
