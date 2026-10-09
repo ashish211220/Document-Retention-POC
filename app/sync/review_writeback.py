@@ -31,7 +31,7 @@ from app.config import (
     SHAREPOINT_SOURCE_DRIVE_ID,
 )
 from app.models.db_models import ClassificationRecord, DocumentRecord
-from app.services.metadata_service import get_taxonomy
+from app.services.metadata_service import load_taxonomy
 from app.services.purview_label_resolver import normalize_retention_rule
 from app.services.retention_schedule_service import calculate_retention_schedule
 from app.sync.sharepoint_sync import SyncPayload, sync_classification_to_sharepoint
@@ -108,7 +108,7 @@ async def _find_cls_record_by_doc_number(
 
 def _find_taxonomy_record(document_type: str):
     """Exact match on document_type (case-insensitive)."""
-    taxonomy = get_taxonomy()
+    taxonomy = load_taxonomy()
     norm = document_type.strip().lower()
     for rec in taxonomy.records:
         if rec.document_type.strip().lower() == norm:
