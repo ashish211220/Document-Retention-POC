@@ -60,9 +60,9 @@ app.add_middleware(
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    from app.services.metadata_service import get_taxonomy
+    from app.services.metadata_service import load_taxonomy
 
-    taxonomy = get_taxonomy()
+    taxonomy = load_taxonomy()
     return {"status": "healthy", "retention_taxonomy_records": taxonomy.total_count}
 
 

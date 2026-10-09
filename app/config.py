@@ -3,33 +3,64 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")
-AZURE_DOCUMENT_INTELLIGENCE_KEY = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_KEY")
+# Azure Key Vault Configuration
+AZURE_KEY_VAULT_URL = os.getenv("AZURE_KEY_VAULT_URL")
+_secret_client = None
 
-AZURE_SEARCH_ENDPOINT = os.getenv("AZURE_SEARCH_ENDPOINT")
-AZURE_SEARCH_API_KEY = os.getenv("AZURE_SEARCH_API_KEY")
-AZURE_SEARCH_INDEX_NAME = os.getenv("AZURE_SEARCH_INDEX_NAME", "retention-taxonomy-v2")
-SEARCH_MODE = os.getenv("SEARCH_MODE", "hybrid").lower()
+if AZURE_KEY_VAULT_URL:
+    try:
+        from azure.identity import DefaultAzureCredential
+        from azure.keyvault.secrets import SecretClient
+        import logging
+        logging.info(f"Connecting to Azure Key Vault: {AZURE_KEY_VAULT_URL}")
+        credential = DefaultAzureCredential()
+        _secret_client = SecretClient(vault_url=AZURE_KEY_VAULT_URL, credential=credential)
+    except ImportError:
+        import logging
+        logging.warning("Azure identity/keyvault packages not installed. Falling back to local env.")
 
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AZURE_OPENAI_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
-AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME = os.getenv(
-    "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"
-)
-AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01")
+def get_secret(env_key: str, default: str = None) -> str:
+    """
+    Fetches a secret from Azure Key Vault if configured, otherwise falls back to local environment.
+    AKV secret names do not support underscores, so they are converted to hyphens.
+    """
+    if _secret_client:
+        akv_key = env_key.replace("_", "-")
+        try:
+            # Note: synchronous fetching blocks startup, but is acceptable during app initialization
+            secret = _secret_client.get_secret(akv_key)
+            if secret.value is not None:
+                return secret.value
+        except Exception as e:
+            # If secret is missing or access denied, fall back to environment variables
+            import logging
+            logging.debug(f"Failed to fetch {akv_key} from AKV: {e}. Falling back to env.")
+    
+    return os.getenv(env_key, default)
 
-AUTO_TAG_CONFIDENCE_THRESHOLD = float(os.getenv("AUTO_TAG_CONFIDENCE_THRESHOLD", "70"))
-MEDIUM_CONFIDENCE_THRESHOLD = float(os.getenv("MEDIUM_CONFIDENCE_THRESHOLD", "0.65"))
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", "10"))
+AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = get_secret("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")
+AZURE_DOCUMENT_INTELLIGENCE_KEY = get_secret("AZURE_DOCUMENT_INTELLIGENCE_KEY")
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_SEARCH_ENDPOINT = get_secret("AZURE_SEARCH_ENDPOINT")
+AZURE_SEARCH_API_KEY = get_secret("AZURE_SEARCH_API_KEY")
+AZURE_SEARCH_INDEX_NAME = get_secret("AZURE_SEARCH_INDEX_NAME", "retention-taxonomy-v2")
+SEARCH_MODE = get_secret("SEARCH_MODE", "hybrid").lower()
 
-SHAREPOINT_CLIENT_ID = os.getenv("SHAREPOINT_CLIENT_ID")
-SHAREPOINT_CLIENT_SECRET = os.getenv(
-    "SHAREPOINT_CLIENT_SECRET"
-)  # App-only auth (client credentials flow)
+AZURE_OPENAI_ENDPOINT = get_secret("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_API_KEY = get_secret("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_DEPLOYMENT_NAME = get_secret("AZURE_OPENAI_DEPLOYMENT_NAME")
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME = get_secret("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME")
+AZURE_OPENAI_API_VERSION = get_secret("AZURE_OPENAI_API_VERSION", "2024-02-01")
+
+AUTO_TAG_CONFIDENCE_THRESHOLD = float(get_secret("AUTO_TAG_CONFIDENCE_THRESHOLD", "70"))
+MEDIUM_CONFIDENCE_THRESHOLD = float(get_secret("MEDIUM_CONFIDENCE_THRESHOLD", "0.65"))
+BATCH_SIZE = int(get_secret("BATCH_SIZE", "10"))
+
+DATABASE_URL = get_secret("DATABASE_URL")
+AZURE_STORAGE_CONNECTION_STRING = get_secret("AZURE_STORAGE_CONNECTION_STRING")
+
+SHAREPOINT_CLIENT_ID = get_secret("SHAREPOINT_CLIENT_ID")
+SHAREPOINT_CLIENT_SECRET = get_secret("SHAREPOINT_CLIENT_SECRET")  # App-only auth (client credentials flow)
 SHAREPOINT_TENANT_ID = os.getenv("SHAREPOINT_TENANT_ID")
 SHAREPOINT_SITE_ID = os.getenv("SHAREPOINT_SITE_ID")
 SHAREPOINT_LIST_ID = os.getenv("SHAREPOINT_LIST_ID")  # legacy; kept for backward compat
