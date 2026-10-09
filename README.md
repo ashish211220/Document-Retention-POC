@@ -77,3 +77,12 @@ The application and dashboard will be available at: `http://127.0.0.1:8000/`
 - `app/models/`: Database schema and Pydantic validation models.
 - `data/retention_taxonomy.json`: Master rulebook for retention categories.
 
+
+## Azure Key Vault & Secrets Management
+
+API credentials are strictly managed in Azure Key Vault (not stored locally). The app uses zero-trust identity (Azure Managed Identities / local CLI).
+
+1. Ensure you have the 'Key Vault Secrets User' role.
+2. Authenticate locally by running: z login
+3. Make sure APP_ENV=local and KEY_VAULT_URL are set in your .env.
+
