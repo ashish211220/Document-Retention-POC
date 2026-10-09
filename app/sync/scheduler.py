@@ -414,6 +414,17 @@ async def _process_one_document(
                 if cls_record.document:
                     doc_number_for_payload = cls_record.document.document_number
 
+                # Safety guard: if status is not auto_approved, never treat the
+                # label as already applied — low-confidence docs must not be locked.
+                effective_label_applied = cls_record.purview_label_applied
+                if cls_record.status != "auto_approved" and effective_label_applied:
+                    logger.warning(
+                        f"[Scheduler] {name} — purview_label_applied=True in DB but "
+                        f"status='{cls_record.status}' (confidence below threshold). "
+                        f"Overriding to False so label is NOT applied this cycle."
+                    )
+                    effective_label_applied = False
+
                 payload = SyncPayload(
                     classification_record_id=cls_record.id,
                     document_name=name,
@@ -432,7 +443,7 @@ async def _process_one_document(
                     sharepoint_list_item_id=existing_sp_list_id
                     or cls_record.sharepoint_list_item_id,
                     sharepoint_web_url=web_url,
-                    purview_label_applied=cls_record.purview_label_applied,
+                    purview_label_applied=effective_label_applied,
                     triggered_by="background-scheduler",
                     audit_action="classified" if action == "new" else "reclassified",
                 )
