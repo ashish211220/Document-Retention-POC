@@ -144,6 +144,13 @@ async def _determine_action(
     if cls_record is None:
         return "new"
 
+    # Human-reviewed documents are never reclassified by the AI pipeline.
+    # Our own writes to SharePoint (metadata columns, Purview label) update the
+    # file's lastModifiedDateTime — without this guard the next poll cycle would
+    # see the file as "modified" and trigger an unwanted reclassification.
+    if cls_record.classified_by == "human":
+        return "skip"
+
     status = cls_record.processing_status or "pending"
 
     if status == "failed_permanent":
