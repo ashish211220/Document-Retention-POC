@@ -257,28 +257,12 @@ async def _apply_one_reviewed_item(
         force_purview_label=True,      # bypass AI confidence gate
     )
 
-    sync_result = await sync_classification_to_sharepoint(token, payload, db)
-
-    if not sync_result.fully_successful:
-        logger.warning(
-            f"[ReviewWriteback] DocumentID={document_number} — partial sync failure: {sync_result.errors}"
-        )
-        return "partial_failure"
-
-    # --- Mark DocumentTagged = "Manually Tagged" (only after full success) ---
-    patch_url = (
-        f"{GRAPH_BASE}/sites/{SHAREPOINT_SITE_ID}/lists/{SHAREPOINT_RETENTION_LIST_ID}"
-        f"/items/{list_item_id}/fields"
-    )
-    await _graph_patch(token, patch_url, {REVIEW_LIST_TAGGED_COL: REVIEW_LIST_TAGGED_DONE})
-
-    # --- Update PostgreSQL record ---
+    # --- Mark classified_by = "human" BEFORE sync so AI pipeline is blocked
+    # even if the sync only partially succeeds (e.g. Purview label locked).
     now = datetime.now(timezone.utc)
     cls_record.classified_by = "human"
     cls_record.reviewer = last_modifier
     cls_record.reviewed_at = now
-    cls_record.review_applied_version = last_modified_str
-    cls_record.review_applied_at = now
     cls_record.document_type = effective_doc_type
     cls_record.category = tax_record.category
     cls_record.team_owner = tax_record.team_owner
@@ -289,6 +273,50 @@ async def _apply_one_reviewed_item(
     cls_record.retention_end_date = schedule.retention_end_date or ""
     cls_record.confidence_score = confidence
     cls_record.status = "Reviewed"
+    await db.commit()  # commit early so AI guard is live immediately
+
+    sync_result = await sync_classification_to_sharepoint(token, payload, db)
+
+    # A locked-record Purview error (notSupported) is a SharePoint restriction —
+    # the file already carries a record label that can't be swapped without
+    # unlocking it in the Purview portal first.  Treat this as a known,
+    # non-retryable failure for the label step only; the rest of the sync is fine.
+    label_error = sync_result.errors.get("retention_label", "")
+    label_locked = "notSupported" in label_error or "prevents it from being edited" in label_error
+    non_label_failed = [s for s in sync_result.steps_failed if s != "retention_label"]
+
+    if non_label_failed:
+        logger.warning(
+            f"[ReviewWriteback] DocumentID={document_number} — partial sync failure (non-label steps): {sync_result.errors}"
+        )
+        return "partial_failure"
+
+    if label_locked:
+        logger.warning(
+            f"[ReviewWriteback] DocumentID={document_number} — Purview label is locked on this file. "
+            f"Unlock the record label in the Purview portal to allow the label change. "
+            f"Human decision has been saved and AI reclassification is blocked."
+        )
+        # Still mark as applied (minus the label) so we don't retry every cycle
+        patch_url = (
+            f"{GRAPH_BASE}/sites/{SHAREPOINT_SITE_ID}/lists/{SHAREPOINT_RETENTION_LIST_ID}"
+            f"/items/{list_item_id}/fields"
+        )
+        await _graph_patch(token, patch_url, {REVIEW_LIST_TAGGED_COL: REVIEW_LIST_TAGGED_DONE})
+        cls_record.review_applied_version = last_modified_str
+        cls_record.review_applied_at = now
+        await db.commit()
+        return "applied_label_locked"
+
+    # --- Full success ---
+    patch_url = (
+        f"{GRAPH_BASE}/sites/{SHAREPOINT_SITE_ID}/lists/{SHAREPOINT_RETENTION_LIST_ID}"
+        f"/items/{list_item_id}/fields"
+    )
+    await _graph_patch(token, patch_url, {REVIEW_LIST_TAGGED_COL: REVIEW_LIST_TAGGED_DONE})
+
+    cls_record.review_applied_version = last_modified_str
+    cls_record.review_applied_at = now
     cls_record.purview_label_applied = True
     cls_record.purview_label_applied_at = now
     await db.commit()
