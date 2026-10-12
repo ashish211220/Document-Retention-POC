@@ -35,10 +35,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # so our sys.modules stubs win over the real app.sync package on disk.
 # ---------------------------------------------------------------------------
 
-# Step 1 - ensure parent packages exist as stubs
-for _pkg in ("app", "app.sync", "app.db", "app.models"):
+# Step 1 - ensure parent packages exist as stubs with valid filesystem paths
+_app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app"))
+for _pkg in ("app", "app.sync", "app.db", "app.models", "app.services"):
+    pkg_sub = _pkg.split(".", 1)[-1] if "." in _pkg else ""
+    pkg_path = [os.path.join(_app_dir, pkg_sub)] if pkg_sub else [_app_dir]
     if _pkg not in sys.modules:
-        sys.modules[_pkg] = types.ModuleType(_pkg)
+        _mod = types.ModuleType(_pkg)
+        _mod.__path__ = pkg_path
+        sys.modules[_pkg] = _mod
+    elif not getattr(sys.modules[_pkg], "__path__", None):
+        sys.modules[_pkg].__path__ = pkg_path
 
 # Step 2 - stub app.config
 _fake_cfg = types.ModuleType("app.config")
@@ -144,8 +151,27 @@ _fake_sp_sync.sync_classification_to_sharepoint = AsyncMock(return_value=_FakeSy
 sys.modules["app.sync.sharepoint_sync"] = _fake_sp_sync
 
 # Step 6 - stub sqlalchemy (scheduler does: from sqlalchemy import select)
+class _FakeTable:
+    def __init__(self, name, *args, **kwargs):
+        self.name = name
+
+class _FakeColumn:
+    def __init__(self, name, *args, **kwargs):
+        self.name = name
+    def asc(self):
+        return self
+    def desc(self):
+        return self
+    def __eq__(self, other):
+        return MagicMock()
+
+import sqlalchemy as _real_sa
 _fake_sa = types.ModuleType("sqlalchemy")
+_fake_sa.__dict__.update(_real_sa.__dict__)
 _fake_sa.select = MagicMock(return_value=MagicMock())
+_fake_sa.text = lambda sql: sql
+_fake_sa.table = _FakeTable
+_fake_sa.column = _FakeColumn
 sys.modules["sqlalchemy"] = _fake_sa
 sys.modules["sqlalchemy.ext"] = types.ModuleType("sqlalchemy.ext")
 _fake_sa_async = types.ModuleType("sqlalchemy.ext.asyncio")
@@ -294,6 +320,110 @@ class TestDetermineAction:
         action = await _determine_action(db, item)
         assert action == "resume"
 
+    @pytest.mark.asyncio
+    async def test_failed_document_not_edited_is_retried(self):
+        """Failed once, file not edited in SharePoint -> should be retried (reclassify)."""
+        file_ts = "2026-09-10T10:00:00Z"
+        # updated_at was bumped to recent time when the failure was saved
+        db_ts = datetime.fromisoformat("2026-09-20T12:00:00+00:00")
+        rec = _FakeCls(
+            sharepoint_item_id="item-005",
+            sharepoint_last_modified=None,
+            updated_at=db_ts,
+            processing_status="failed",
+            processing_attempts=1,
+            purview_label_applied=False,
+        )
+        db = _FakeDB(cls_record=rec)
+        item = _make_item(item_id="item-005", last_modified=file_ts)
+        action = await _determine_action(db, item)
+        assert action == "reclassify"
+
+    @pytest.mark.asyncio
+    async def test_failed_status_at_max_retries_is_skip_permanent(self):
+        """Failed status with attempts >= MAX_PROCESSING_RETRIES -> skip_permanent."""
+        rec = _FakeCls(
+            sharepoint_item_id="item-006",
+            sharepoint_last_modified=None,
+            processing_status="failed",
+            processing_attempts=3,
+            purview_label_applied=False,
+        )
+        db = _FakeDB(cls_record=rec)
+        item = _make_item(item_id="item-006")
+        action = await _determine_action(db, item)
+        assert action == "skip_permanent"
+
+    @pytest.mark.asyncio
+    async def test_legal_hold_document_is_skipped(self):
+        """Documents on legal hold must never be reclassified."""
+        rec = _FakeCls(
+            sharepoint_item_id="item-hold",
+            sharepoint_last_modified=None,
+            processing_status="completed",
+            legal_hold=True,
+        )
+        db = _FakeDB(cls_record=rec)
+        item = _make_item(item_id="item-hold")
+        action = await _determine_action(db, item)
+        assert action == "skip"
+
+    @pytest.mark.asyncio
+    async def test_review_status_legal_hold_is_skipped(self):
+        """review_status='legal_hold' must return skip."""
+        rec = _FakeCls(
+            sharepoint_item_id="item-hold-2",
+            sharepoint_last_modified=None,
+            processing_status="completed",
+            review_status="legal_hold",
+        )
+        db = _FakeDB(cls_record=rec)
+        item = _make_item(item_id="item-hold-2")
+        action = await _determine_action(db, item)
+        assert action == "skip"
+
+    @pytest.mark.asyncio
+    async def test_approved_deletion_is_skipped(self):
+        """Documents approved for deletion must not be reclassified."""
+        rec = _FakeCls(
+            sharepoint_item_id="item-del",
+            sharepoint_last_modified=None,
+            processing_status="completed",
+            review_status="approved_deletion",
+        )
+        db = _FakeDB(cls_record=rec)
+        item = _make_item(item_id="item-del")
+        action = await _determine_action(db, item)
+        assert action == "skip"
+
+    @pytest.mark.asyncio
+    async def test_deletion_status_approved_is_skipped(self):
+        """deletion_status='Deletion Approved' must return skip."""
+        rec = _FakeCls(
+            sharepoint_item_id="item-del-2",
+            sharepoint_last_modified=None,
+            processing_status="completed",
+            deletion_status="Deletion Approved",
+        )
+        db = _FakeDB(cls_record=rec)
+        item = _make_item(item_id="item-del-2")
+        action = await _determine_action(db, item)
+        assert action == "skip"
+
+    @pytest.mark.asyncio
+    async def test_human_reviewed_document_tagged_is_skipped(self):
+        """document_tagged_status in ('Reviewed', 'Manually Tagged') must return skip."""
+        rec = _FakeCls(
+            sharepoint_item_id="item-human",
+            sharepoint_last_modified=None,
+            processing_status="completed",
+            document_tagged_status="Manually Tagged",
+        )
+        db = _FakeDB(cls_record=rec)
+        item = _make_item(item_id="item-human")
+        action = await _determine_action(db, item)
+        assert action == "skip"
+
 
 # ---------------------------------------------------------------------------
 # Test 6: Concurrency lock
@@ -439,6 +569,102 @@ class TestExponentialBackoff:
         with patch.object(_sched.asyncio, "sleep", new=AsyncMock()):
             with pytest.raises(httpx.HTTPStatusError):
                 await _with_backoff(always_429, label="always-429", max_total_wait=5.0)
+
+
+# ---------------------------------------------------------------------------
+# Test 11: Distributed advisory lock
+# ---------------------------------------------------------------------------
+
+class TestDistributedAdvisoryLock:
+
+    @pytest.mark.asyncio
+    async def test_distributed_lock_bypasses_when_not_postgres(self):
+        """When not postgres, lock yields True without database calls."""
+        with patch.object(_sched, "_is_postgres_db", return_value=False):
+            async with _sched._acquire_distributed_poll_lock() as got_lock:
+                assert got_lock is True
+
+    @pytest.mark.asyncio
+    async def test_distributed_lock_acquires_and_releases(self):
+        """Acquires pg_try_advisory_lock and releases pg_advisory_unlock on exit."""
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = True
+        mock_session.execute.return_value = mock_result
+
+        class MockSessionCtx:
+            async def __aenter__(self):
+                return mock_session
+
+            async def __aexit__(self, *args):
+                pass
+
+        mock_sessionmaker = MagicMock(return_value=MockSessionCtx())
+
+        with patch.object(_sched, "_is_postgres_db", return_value=True), \
+             patch.object(_sched, "async_session", mock_sessionmaker):
+            async with _sched._acquire_distributed_poll_lock() as got_lock:
+                assert got_lock is True
+
+            assert mock_session.execute.call_count == 2
+            calls = mock_session.execute.call_args_list
+            assert "pg_try_advisory_lock" in str(calls[0][0][0])
+            assert calls[0][0][1] == {"lock_id": _sched.SCHEDULER_POLL_ADVISORY_LOCK_ID}
+            assert "pg_advisory_unlock" in str(calls[1][0][0])
+            assert calls[1][0][1] == {"lock_id": _sched.SCHEDULER_POLL_ADVISORY_LOCK_ID}
+
+    @pytest.mark.asyncio
+    async def test_distributed_lock_skips_when_another_worker_holds_it(self):
+        """When another worker holds the lock, returns False and does not unlock."""
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = False
+        mock_session.execute.return_value = mock_result
+
+        class MockSessionCtx:
+            async def __aenter__(self):
+                return mock_session
+
+            async def __aexit__(self, *args):
+                pass
+
+        mock_sessionmaker = MagicMock(return_value=MockSessionCtx())
+
+        with patch.object(_sched, "_is_postgres_db", return_value=True), \
+             patch.object(_sched, "async_session", mock_sessionmaker):
+            async with _sched._acquire_distributed_poll_lock() as got_lock:
+                assert got_lock is False
+
+            assert mock_session.execute.call_count == 1
+            assert "pg_try_advisory_lock" in str(mock_session.execute.call_args[0][0])
+
+    @pytest.mark.asyncio
+    async def test_distributed_lock_unlocks_on_exception(self):
+        """Releases pg_advisory_unlock even if an unhandled exception occurs."""
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar.return_value = True
+        mock_session.execute.return_value = mock_result
+
+        class MockSessionCtx:
+            async def __aenter__(self):
+                return mock_session
+
+            async def __aexit__(self, *args):
+                pass
+
+        mock_sessionmaker = MagicMock(return_value=MockSessionCtx())
+
+        with patch.object(_sched, "_is_postgres_db", return_value=True), \
+             patch.object(_sched, "async_session", mock_sessionmaker):
+            with pytest.raises(RuntimeError, match="Simulated crash"):
+                async with _sched._acquire_distributed_poll_lock() as got_lock:
+                    assert got_lock is True
+                    raise RuntimeError("Simulated crash")
+
+            assert mock_session.execute.call_count == 2
+            calls = mock_session.execute.call_args_list
+            assert "pg_advisory_unlock" in str(calls[1][0][0])
 
 
 # ---------------------------------------------------------------------------

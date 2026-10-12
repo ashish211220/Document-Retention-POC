@@ -1,8 +1,9 @@
+import asyncio
 import json
 import os
 from typing import List, Optional
 from app.models.retention import RetentionRecord, RetentionTaxonomy
-from app.config import AZURE_SEARCH_ENDPOINT, AZURE_SEARCH_API_KEY
+from app.config import AZURE_SEARCH_ENDPOINT, AZURE_SEARCH_API_KEY, SEARCH_MODE
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -72,8 +73,6 @@ def search_by_keywords(keywords: List[str], top_k: int = 5) -> List[RetentionRec
 
 
 def _azure_search(keywords: List[str], top_k: int) -> List[RetentionRecord]:
-    from app.config import SEARCH_MODE
-
     query = " ".join(keywords)
     logger.info(f"Azure AI Search query: '{query}' (top {top_k}) [Mode: {SEARCH_MODE}]")
 
@@ -135,3 +134,9 @@ def get_record_by_id(record_id: str) -> Optional[RetentionRecord]:
         if record.id == record_id:
             return record
     return None
+
+
+async def search_by_keywords_async(keywords: List[str], top_k: int = 5) -> List[RetentionRecord]:
+    """Asynchronously search taxonomy by keywords on a worker thread."""
+    return await asyncio.to_thread(search_by_keywords, keywords, top_k)
+

@@ -1,0 +1,29 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.11'
+  displayName: 'Set up Python 3.11'
+
+- script: |
+    python -m pip install --upgrade pip
+    pip install -r requirements-dev.txt
+  displayName: 'Install dependencies'
+
+- script: |
+    export PYTHONPATH=.
+    export APP_ENV=test
+    python -m pytest tests/test_retention_schedule.py tests/test_choice_columns.py tests/test_purview_label_resolver.py tests/test_document_number.py tests/test_scheduler.py tests/test_sharepoint_sync.py
+  displayName: 'Run automated tests'

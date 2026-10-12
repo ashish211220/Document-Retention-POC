@@ -1,3 +1,5 @@
+import asyncio
+import os
 from typing import List, Optional
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
@@ -8,7 +10,6 @@ from azure.search.documents.indexes.models import (
     SearchFieldDataType,
     SimpleField,
     SearchableField,
-    CorsOptions,
     VectorSearch,
     HnswAlgorithmConfiguration,
     VectorSearchProfile,
@@ -24,20 +25,52 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+_index_client: Optional[SearchIndexClient] = None
+_search_client: Optional[SearchClient] = None
+
+
+def _get_search_credential():
+    """Return an AzureKeyCredential if API key is set, otherwise fall back to DefaultAzureCredential (Managed Identity)."""
+    if AZURE_SEARCH_API_KEY:
+        return AzureKeyCredential(AZURE_SEARCH_API_KEY)
+    try:
+        from azure.identity import DefaultAzureCredential
+        return DefaultAzureCredential()
+    except Exception:
+        return AzureKeyCredential("")
+
 
 def _get_index_client() -> SearchIndexClient:
-    return SearchIndexClient(
-        endpoint=AZURE_SEARCH_ENDPOINT,
-        credential=AzureKeyCredential(AZURE_SEARCH_API_KEY),
-    )
+    """Index management requires administrative permissions (Admin Key or Search Service Contributor)."""
+    global _index_client
+    if _index_client is None:
+        admin_key = os.getenv("AZURE_SEARCH_ADMIN_KEY") or AZURE_SEARCH_API_KEY
+        if admin_key:
+            credential = AzureKeyCredential(admin_key)
+        else:
+            try:
+                from azure.identity import DefaultAzureCredential
+                credential = DefaultAzureCredential()
+            except Exception:
+                credential = AzureKeyCredential("")
+        _index_client = SearchIndexClient(
+            endpoint=AZURE_SEARCH_ENDPOINT,
+            credential=credential,
+        )
+    return _index_client
 
 
 def _get_search_client() -> SearchClient:
-    return SearchClient(
-        endpoint=AZURE_SEARCH_ENDPOINT,
-        index_name=AZURE_SEARCH_INDEX_NAME,
-        credential=AzureKeyCredential(AZURE_SEARCH_API_KEY),
-    )
+    """Runtime search client. Only requires read-only query permissions (Query Key or Search Index Data Reader)."""
+    global _search_client
+    if _search_client is None:
+        _search_client = SearchClient(
+            endpoint=AZURE_SEARCH_ENDPOINT,
+            index_name=AZURE_SEARCH_INDEX_NAME,
+            credential=_get_search_credential(),
+        )
+    return _search_client
+
 
 
 INDEX_FIELDS = [
@@ -126,7 +159,6 @@ def create_index_if_not_exists() -> bool:
     index = SearchIndex(
         name=AZURE_SEARCH_INDEX_NAME,
         fields=INDEX_FIELDS,
-        cors_options=CorsOptions(allowed_origins=["*"]),
         vector_search=vector_search,
     )
     client.create_index(index)
@@ -145,18 +177,22 @@ import re
 
 
 def _parse_retention_rule(rule: str) -> tuple:
-   
     rule = (rule or "").strip().upper()
 
     month_match = re.search(r"(\d+)\s*MONTHS?", rule)
     if month_match:
         return ("TIME", int(month_match.group(1)), "months")
 
-    match = re.match(r"^([A-Z]+)[-+]?(\d+)?$", rule)
+    # Clean whitespace around +/- (e.g. "AL + 3" -> "AL+3")
+    cleaned = re.sub(r"\s*([+-])\s*", r"\1", rule)
+
+    match = re.match(r"^([A-Z]+)[-+]?(\d+)?$", cleaned)
     if match:
         code = match.group(1)
         if code == "YE":
             code = "CE"
+        elif code in ("PERMANENT", "PM"):
+            code = "PM"
         period = int(match.group(2)) if match.group(2) else None
         unit = "years" if period else None
         return (code, period, unit)
@@ -315,3 +351,25 @@ def get_index_stats() -> dict:
         "document_count": stats.document_count,
         "storage_size_bytes": stats.storage_size,
     }
+
+
+async def hybrid_search_async(
+    query: str, top_k: int = 5, filter_expr: Optional[str] = None
+) -> List[dict]:
+    """Asynchronously execute hybrid search on a background worker thread."""
+    return await asyncio.to_thread(hybrid_search, query, top_k, filter_expr)
+
+
+async def keyword_search_async(
+    query: str, top_k: int = 5, filter_expr: Optional[str] = None
+) -> List[dict]:
+    """Asynchronously execute keyword search on a background worker thread."""
+    return await asyncio.to_thread(keyword_search, query, top_k, filter_expr)
+
+
+async def filter_search_async(
+    filter_expr: str, top_k: int = 10
+) -> List[dict]:
+    """Asynchronously execute filter search on a background worker thread."""
+    return await asyncio.to_thread(filter_search, filter_expr, top_k)
+

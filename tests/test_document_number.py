@@ -38,7 +38,9 @@ _fake_db = types.ModuleType("app.db.database")
 _fake_db.async_session = None
 
 class _FakeBase:
-    pass
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
 _fake_db.Base = _FakeBase
 sys.modules["app.db.database"] = _fake_db
@@ -305,9 +307,7 @@ class TestDuplicateDetectionFilter:
 
         import httpx as _httpx_real
         with mock.patch.object(_httpx_real, "AsyncClient", return_value=_MockAsyncClient()):
-            import importlib
             import app.sync.scheduler as sched
-            importlib.reload(sched)  # ensure we pick up the latest mock config
             result = await sched._query_existing_list_item(
                 token="test-token",
                 site_id="test-site",

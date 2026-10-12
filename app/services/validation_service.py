@@ -48,9 +48,11 @@ def determine_status(confidence_score: float) -> str:
     return "pending_review"
 
 
-def determine_document_tagged_status(classification_status: str) -> str:
+def determine_document_tagged_status(
+    classification_status: str, review_required: bool = False
+) -> str:
     from app.models.sharepoint_enums import DocumentTaggedStatus
 
-    if classification_status == "auto_approved":
+    if classification_status == "auto_approved" and not review_required:
         return DocumentTaggedStatus.AUTO_TAGGED.value
     return DocumentTaggedStatus.REVIEW_PENDING.value

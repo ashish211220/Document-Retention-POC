@@ -113,8 +113,12 @@ sys.modules.setdefault("httpx", MagicMock())
 
 # Stub app.services.validation_service (imported by sharepoint_sync)
 _fake_validation = types.ModuleType("app.services.validation_service")
-_fake_validation.determine_document_tagged_status = lambda status: "Auto-Tagged"
-sys.modules["app.services"] = types.ModuleType("app.services")
+_fake_validation.determine_document_tagged_status = lambda status, *a, **k: "Auto-Tagged"
+import os as _os
+_services_mod = types.ModuleType("app.services")
+_services_mod.__path__ = [_os.path.normpath(_os.path.join(_os.path.dirname(__file__), "..", "app", "services"))]
+_services_mod.validation_service = _fake_validation
+sys.modules["app.services"] = _services_mod
 sys.modules["app.services.validation_service"] = _fake_validation
 
 

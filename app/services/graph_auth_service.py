@@ -45,8 +45,8 @@ class GraphAuthService:
         description = result.get("error_description", "No description provided.")
         raise Exception(
             f"Graph API token acquisition failed: [{error}] {description}\n"
-            f"Ensure admin consent has been granted for Sites.ReadWrite.All "
-            f"(Application) on your app registration."
+            f"Ensure admin consent has been granted for Sites.Selected (recommended for least privilege) "
+            f"or Sites.ReadWrite.All (Application) on your app registration."
         )
 
 

@@ -3,6 +3,7 @@ from sqlalchemy import (
     String,
     Integer,
     Float,
+    Date,
     DateTime,
     ForeignKey,
     Text,
@@ -38,10 +39,10 @@ class DocumentRecord(Base):
         "ProcessingHistory", back_populates="document", cascade="all, delete-orphan"
     )
     reviews = relationship(
-        "ReviewRecord", back_populates="document", cascade="all, delete-orphan"
+        "ReviewRecord", back_populates="document"
     )
     audit_logs = relationship(
-        "AuditLog", back_populates="document", cascade="all, delete-orphan"
+        "AuditLog", back_populates="document"
     )
 
 
@@ -66,9 +67,9 @@ class ClassificationRecord(Base):
         String, nullable=True
     )  # Actual rule code e.g. FE+4, AL+2, Permanent
     retention_code = Column(String, nullable=True)  # e.g. FE, CE, AC
-    retention_start_date = Column(String, nullable=True)
-    retention_end_date = Column(String, nullable=True)
-    retention_period = Column(String, nullable=True)  # Number stored as string e.g. "4"
+    retention_start_date = Column(Date, nullable=True)
+    retention_end_date = Column(Date, nullable=True)
+    retention_period = Column(Integer, nullable=True)  # Number of years/months e.g. 4
     retention_period_unit = Column(String, nullable=True)  # e.g. "years", "months"
     lifecycle_status = Column(String, default="Active")
     review_required = Column(Boolean, default=False)
@@ -136,7 +137,7 @@ class ReviewRecord(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     document_id = Column(
-        String, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+        String, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
     reviewer_id = Column(
         String, nullable=False
@@ -155,7 +156,7 @@ class AuditLog(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     document_id = Column(
-        String, ForeignKey("documents.id", ondelete="CASCADE"), nullable=True
+        String, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
     event_type = Column(String, nullable=False)
     event_data = Column(JSON, nullable=True)

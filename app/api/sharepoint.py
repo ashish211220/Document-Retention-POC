@@ -36,9 +36,10 @@ def _get_token() -> str:
     try:
         return graph_auth_service.get_access_token()
     except Exception as exc:
-        logger.error(f"Token acquisition failed: {exc}")
+        logger.exception("Token acquisition failed")
         raise HTTPException(
-            status_code=503, detail=f"Could not acquire Graph API token: {exc}"
+            status_code=503,
+            detail="Authentication failed. Could not acquire Graph API token. Please check server logs.",
         )
 
 
@@ -50,8 +51,11 @@ async def list_documents():
         docs = await sharepoint_service.get_documents(token)
         return {"total": len(docs), "documents": docs}
     except Exception as exc:
-        logger.error(f"Failed to list SharePoint documents: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.exception("Failed to list SharePoint documents")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to list SharePoint documents. Please check server logs.",
+        )
 
 
 @router.post("/sync/retry", summary="Retry all failed SharePoint sync steps")
@@ -65,5 +69,8 @@ async def retry_failed(db: AsyncSession = Depends(get_db)):
         summary = await retry_failed_syncs(token=token, db=db)
         return {"retry_summary": summary}
     except Exception as exc:
-        logger.error(f"Retry sync failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        logger.exception("Retry sync failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Retry sync operation failed. Please check server logs.",
+        )

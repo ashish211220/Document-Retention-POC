@@ -6,9 +6,7 @@ Tests:
   2. resolve_purview_label returns correct label for known rules
   3. Unmapped rule -> NoLabelMappingError (no Graph call, no fallback)
   4. Mapped label Graph says "not found" -> LabelNotFoundError (graceful)
-  5. PURVIEW_LABEL_STRATEGY=base_code reproduces old behavior
-  6. ALLOW_BASE_CODE_FALLBACK logs + falls back when flag is true
-  7. Text columns (retention_rule, retention_code) never receive Purview label name
+  5. Text columns (retention_rule, retention_code) never receive Purview label name
 """
 import asyncio
 import json
@@ -20,62 +18,32 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# ── Stub heavy dependencies so import succeeds without installed packages ──────
-for mod in [
-    "sqlalchemy", "sqlalchemy.ext", "sqlalchemy.ext.asyncio",
-    "httpx", "pydantic", "dotenv",
-    "azure", "azure.core", "azure.core.credentials",
-    "azure.ai", "azure.ai.documentintelligence",
-    "azure.search", "azure.search.documents",
-    "azure.search.documents.indexes", "azure.search.documents.indexes.models",
-    "azure.search.documents.models",
-    "openai",
-]:
-    if mod not in sys.modules:
-        sys.modules[mod] = types.ModuleType(mod)
-
-# Stub dotenv
-sys.modules["dotenv"].load_dotenv = lambda **kw: None
-
-# Stub sqlalchemy AsyncSession
-_sa_async = sys.modules.setdefault("sqlalchemy.ext.asyncio", types.ModuleType("sqlalchemy.ext.asyncio"))
-_sa_async.AsyncSession = object
-
-# Stub httpx
-_httpx = sys.modules["httpx"]
-_httpx.AsyncClient = MagicMock
-_httpx.HTTPStatusError = Exception
-
-# ── Patch os.getenv before importing config ────────────────────────────────────
-_ENV_BASE = {
-    "AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT": "https://fake.cognitiveservices.azure.com/",
-    "AZURE_DOCUMENT_INTELLIGENCE_KEY": "fakekey",
-    "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": "fake-embed",
-    "PURVIEW_LABEL_STRATEGY": "per_rule",
-    "ALLOW_BASE_CODE_FALLBACK": "false",
+# Mock app.keyvault before config is imported so unit tests don't require Azure Key Vault
+_fake_kv = types.ModuleType("app.keyvault")
+_fake_kv.get_secrets = lambda *a, **kw: {
+    "AZURE_DOCUMENT_INTELLIGENCE_KEY": "fake-doc-key",
+    "AZURE_SEARCH_API_KEY": "fake-search-key",
+    "AZURE_OPENAI_API_KEY": "fake-openai-key",
+    "DATABASE_URL": "sqlite+aiosqlite:///:memory:",
+    "SHAREPOINT_CLIENT_SECRET": "fake-sp-secret",
 }
+sys.modules["app.keyvault"] = _fake_kv
 
+os.environ.setdefault("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT", "https://fake.cognitiveservices.azure.com/")
+os.environ.setdefault("AZURE_DOCUMENT_INTELLIGENCE_KEY", "fakekey")
+os.environ.setdefault("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME", "fake-embed")
 
-def _patch_env(extra: dict = None):
-    env = {**_ENV_BASE, **(extra or {})}
-    return patch.dict(os.environ, env, clear=False)
-
-
-# ── Import modules under test ──────────────────────────────────────────────────
-with _patch_env():
-    from app.services.purview_label_resolver import normalize_retention_rule, resolve_purview_label, reload_map
-    import importlib
-    import app.config as _cfg_module
-
-# Re-import sharepoint_sync after env is set
-with _patch_env():
-    import app.sync.sharepoint_sync as _sync_module
-    from app.sync.sharepoint_sync import (
-        LabelNotFoundError,
-        NoLabelMappingError,
-        _RealGraphClient,
-        SyncPayload,
-    )
+from app.services.purview_label_resolver import (
+    normalize_retention_rule,
+    resolve_purview_label,
+    reload_map,
+)
+from app.sync.sharepoint_sync import (
+    LabelNotFoundError,
+    NoLabelMappingError,
+    _RealGraphClient,
+    SyncPayload,
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -104,7 +72,6 @@ class TestNormalize:
         assert normalize_retention_rule("PM") == "PM"
 
     def test_months(self):
-        # Spaces removed from "3 MONTHS" -> "3MONTHS" for lookup
         assert normalize_retention_rule("3 MONTHS") == "3MONTHS"
 
 
@@ -114,21 +81,21 @@ class TestNormalize:
 class TestResolve:
     def test_fe_plus_2(self):
         result = resolve_purview_label("FE+2")
-        assert result == "FE+2"
+        assert result == "FE-2"
 
     def test_case_insensitive_input(self):
-        assert resolve_purview_label("fe+2") == "FE+2"
+        assert resolve_purview_label("fe+2") == "FE-2"
 
     def test_spaces_input(self):
-        assert resolve_purview_label("fe + 2") == "FE+2"
+        assert resolve_purview_label("fe + 2") == "FE-2"
 
     def test_permanent(self):
         result = resolve_purview_label("Permanent")
-        assert result == "Permanent"
+        assert result == "Forever"
 
     def test_pm(self):
         result = resolve_purview_label("PM")
-        assert result == "Permanent"
+        assert result == "Forever"
 
     def test_unknown_returns_none(self):
         assert resolve_purview_label("XX+999") is None
@@ -140,13 +107,10 @@ class TestResolve:
 class TestUnmappedRule:
     def test_no_label_mapping_raised(self):
         client = _RealGraphClient()
-        with _patch_env({"PURVIEW_LABEL_STRATEGY": "per_rule", "ALLOW_BASE_CODE_FALLBACK": "false"}):
-            with patch.object(_sync_module, "PURVIEW_LABEL_STRATEGY", "per_rule"), \
-                 patch.object(_sync_module, "ALLOW_BASE_CODE_FALLBACK", False):
-                with pytest.raises(NoLabelMappingError) as exc_info:
-                    asyncio.get_event_loop().run_until_complete(
-                        client.patch_retention_label("tok", "drv", "itm", "XX+999")
-                    )
+        with pytest.raises(NoLabelMappingError) as exc_info:
+            asyncio.run(
+                client.patch_retention_label("tok", "drv", "itm", "XX+999")
+            )
         assert "XX+999" in str(exc_info.value)
 
 
@@ -165,52 +129,20 @@ class TestLabelNotFoundInGraph:
         mock_client.patch = AsyncMock(return_value=mock_resp)
 
         client = _RealGraphClient()
-        with patch.object(_sync_module, "PURVIEW_LABEL_STRATEGY", "per_rule"), \
-             patch.object(_sync_module, "ALLOW_BASE_CODE_FALLBACK", False), \
-             patch("httpx.AsyncClient", return_value=mock_client):
+        with patch("httpx.AsyncClient", return_value=mock_client):
             with pytest.raises(LabelNotFoundError) as exc_info:
-                asyncio.get_event_loop().run_until_complete(
+                asyncio.run(
                     client.patch_retention_label("tok", "drv", "itm", "FE+2")
                 )
-        assert exc_info.value.label_name == "FE+2"
+        assert exc_info.value.label_name == "FE-2"
         assert exc_info.value.retention_rule == "FE+2"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 5. PURVIEW_LABEL_STRATEGY=base_code reproduces old behavior
-# ──────────────────────────────────────────────────────────────────────────────
-class TestBaseCodeStrategy:
-    def test_base_code_uses_purview_label_name_map(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 204
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json = MagicMock(return_value={})
-
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        mock_client.patch = AsyncMock(return_value=mock_resp)
-
-        from app.config import PURVIEW_LABEL_NAME_MAP
-        client = _RealGraphClient()
-        with patch.object(_sync_module, "PURVIEW_LABEL_STRATEGY", "base_code"), \
-             patch("httpx.AsyncClient", return_value=mock_client):
-            asyncio.get_event_loop().run_until_complete(
-                client.patch_retention_label("tok", "drv", "itm", "FE+4")
-            )
-
-        # Should have sent the base label FE_V1 (from PURVIEW_LABEL_NAME_MAP["FE"])
-        called_body = mock_client.patch.call_args[1]["json"]
-        assert called_body["name"] == PURVIEW_LABEL_NAME_MAP["FE"]
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 6. Text columns never receive the Purview label name
+# 5. Text columns never receive the Purview label name
 # ──────────────────────────────────────────────────────────────────────────────
 class TestTextColumnsNotPolluted:
     def test_metadata_columns_use_raw_rule_not_label(self):
-        # The metadata_fields dict built in Step 2 should use retention_rule="FE+2"
-        # and retention_code="FE" — never the Purview label name (e.g. "FE+2" label)
         payload = SyncPayload(
             classification_record_id=str(uuid.uuid4()),
             document_name="test.pdf",
@@ -228,11 +160,61 @@ class TestTextColumnsNotPolluted:
             sharepoint_item_id="item123",
             sharepoint_list_item_id=None,
             sharepoint_web_url="https://sp.example.com",
-            purview_label_applied=True,  # already applied -> step 1 skipped
+            purview_label_applied=True,
         )
-        # The retention_rule and retention_code on the payload are raw taxonomy values
         assert payload.retention_rule == "FE+2"
         assert payload.retention_code == "FE"
-        # They are NOT the Purview label name
-        assert payload.retention_rule != "FE_V1"
-        assert payload.retention_code != "FE_V1"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 6. Full Taxonomy Coverage & Rule Parsing Tests
+# ──────────────────────────────────────────────────────────────────────────────
+class TestTaxonomyLabelCoverage:
+    def test_all_standard_taxonomy_rules_map_to_purview_labels(self):
+        """
+        Loads data/retention_taxonomy.json and verifies that every standard rule
+        (322 out of 327 taxonomy rows) resolves to a valid Purview label.
+        The 5 compound/unstructured rules require records team clarification.
+        """
+        taxonomy_path = os.path.join(
+            os.path.dirname(__file__), "..", "data", "retention_taxonomy.json"
+        )
+        with open(taxonomy_path, "r", encoding="utf-8") as f:
+            taxonomy_data = json.load(f)
+
+        complex_rules = {
+            "FE+2 AL+2",
+            "FE+7 then AV",
+            "AL+2 (2 yrs. after settlement)",
+            "YE - Automated",
+            "TBD",
+        }
+
+        unmapped = []
+        for row in taxonomy_data:
+            rule = row.get("retention_rule", "").strip()
+            if not rule or rule in complex_rules:
+                continue
+            label = resolve_purview_label(rule)
+            if not label:
+                unmapped.append((row.get("id"), rule))
+
+        assert unmapped == [], f"Found unmapped taxonomy rules: {unmapped}"
+
+    def test_parse_retention_rule_spacing_and_permanent(self):
+        """
+        Verifies _parse_retention_rule correctly parses spaced rules and maps
+        Permanent to code PM.
+        """
+        from app.azure.search import _parse_retention_rule
+
+        assert _parse_retention_rule("AL + 3") == ("AL", 3, "years")
+        assert _parse_retention_rule("AL +7") == ("AL", 7, "years")
+        assert _parse_retention_rule("US + 3") == ("US", 3, "years")
+        assert _parse_retention_rule("Permanent") == ("PM", None, None)
+        assert _parse_retention_rule("PM") == ("PM", None, None)
+        assert _parse_retention_rule("2 months") == ("TIME", 2, "months")
+        assert _parse_retention_rule("6 months") == ("TIME", 6, "months")
+        assert _parse_retention_rule("FE+5") == ("FE", 5, "years")
+        assert _parse_retention_rule("FE+7 then AV") == ("FE+7 THEN AV", None, None)
+

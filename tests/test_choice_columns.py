@@ -204,6 +204,12 @@ class TestDetermineDocumentTaggedStatus:
     def test_unknown_status_maps_to_review_pending(self):
         assert determine_document_tagged_status("unknown_status") == "Review Pending"
 
+    def test_auto_approved_with_review_required_maps_to_review_pending(self):
+        assert determine_document_tagged_status("auto_approved", review_required=True) == "Review Pending"
+
+    def test_auto_approved_without_review_required_maps_to_auto_tagged(self):
+        assert determine_document_tagged_status("auto_approved", review_required=False) == "Auto-Tagged"
+
 
 # ===========================================================================
 # 5. Sync payload tests (mocked Graph + DB)
@@ -310,6 +316,60 @@ class TestSyncPayloadChoiceValues:
             await sync_classification_to_sharepoint("test-token", payload, mock_db)
 
         assert captured_fields.get("DocumentTagged") == "Review Pending"
+
+    @pytest.mark.asyncio
+    async def test_new_row_auto_approved_with_review_required_writes_review_pending(self):
+        """Auto-approved status with review_required=True must write 'Review Pending' and skip label."""
+        from app.sync.sharepoint_sync import SyncPayload
+        payload = SyncPayload(
+            classification_record_id="test-cls-id",
+            document_name="Test Document.pdf",
+            document_type="Board Minutes",
+            category="GOVERNANCE & ADMINISTRATIVE",
+            section="Corporate Governance",
+            retention_code="FE",
+            retention_rule="FE+2",
+            retention_end_date="2028-09-30",
+            confidence_score=0.82,
+            team_owner="Operations",
+            classification_status="auto_approved",
+            document_number=101,
+            drive_id="test-drive",
+            sharepoint_item_id="sp-item-001",
+            sharepoint_list_item_id=None,
+            sharepoint_web_url="https://example.sharepoint.com/file.pdf",
+            purview_label_applied=False,
+            review_required=True,
+        )
+
+        captured_fields = {}
+        label_called = []
+
+        class _MockGraph:
+            async def patch_retention_label(self, *a, **kw):
+                label_called.append(True)
+                return {}
+            async def patch_metadata_columns(self, *a, **kw): return {}
+            async def create_retention_list_item(self, token, site_id, list_id, fields):
+                captured_fields.update(fields)
+                return {"id": "new-item-456"}
+            async def create_auditlog_item(self, *a, **kw): return {}
+
+        mock_db = mock.AsyncMock()
+        mock_db.get = mock.AsyncMock(return_value=mock.MagicMock(
+            id="test-cls-id",
+            sharepoint_list_item_id=None,
+            purview_label_applied=False,
+        ))
+        mock_db.flush = mock.AsyncMock()
+
+        with mock.patch("app.sync.sharepoint_sync._get_graph_client", return_value=_MockGraph()), \
+             mock.patch("app.sync.sharepoint_sync._log_sync", new_callable=mock.AsyncMock):
+            from app.sync.sharepoint_sync import sync_classification_to_sharepoint
+            await sync_classification_to_sharepoint("test-token", payload, mock_db)
+
+        assert captured_fields.get("DocumentTagged") == "Review Pending"
+        assert len(label_called) == 0, "Purview label must NOT be called when review_required=True"
 
     @pytest.mark.asyncio
     async def test_resync_does_not_include_is_deleted(self):

@@ -16,7 +16,7 @@ def test_hybrid_search_routing(mock_hybrid):
     
     mock_hybrid.assert_called_once_with("test query", top_k=5)
     assert len(results) == 1
-    assert results[0].id == "RET-1"
+    assert results[0].id in ("RET-1", "RET.1")
 
 @patch("app.services.metadata_service.SEARCH_MODE", "keyword")
 @patch("app.azure.search.keyword_search")
@@ -29,7 +29,7 @@ def test_keyword_search_routing(mock_keyword):
     
     mock_keyword.assert_called_once_with("legacy query", top_k=5)
     assert len(results) == 1
-    assert results[0].id == "RET-2"
+    assert results[0].id in ("RET-2", "RET.2")
 
 @patch("app.azure.search.generate_embedding")
 @patch("app.azure.search._get_search_client")

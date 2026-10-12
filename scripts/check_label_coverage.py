@@ -75,13 +75,13 @@ def main():
     print(f"\n[A] Taxonomy rules with NO label in purview_labels.json ({len(no_mapping)}):")
     if no_mapping:
         for r in no_mapping:
-            print(f"    ✗ '{r}'  (normalized: '{normalize(r)}')")
+            print(f"    [X] '{r}'  (normalized: '{normalize(r)}')")
     else:
-        print("    ✓ All rules are covered!")
+        print("    [OK] All rules are covered!")
 
     print(f"\n[B] Complex/multi-rules excluded from mapping ({len(complex_rules)}):")
     for r in complex_rules:
-        print(f"    ⚠  '{r}'  — needs manual review")
+        print(f"    [!]  '{r}'  -- needs manual review")
 
     # --- B: Labels in map that match no taxonomy rule ---
     used_normalized = {normalize(r) for r in raw_rules if not is_complex(r)}
@@ -91,7 +91,7 @@ def main():
         for k in sorted(unused_labels):
             print(f"    ~ '{k}' -> '{label_map[k]}'")
     else:
-        print("    ✓ Every label is referenced by at least one taxonomy rule.")
+        print("    [OK] Every label is referenced by at least one taxonomy rule.")
 
     # --- C: Near-misses ---
     print(f"\n[D] Near-miss analysis (same code+period, different format):")
@@ -102,18 +102,18 @@ def main():
             near_misses.append((rule, n))
     if near_misses:
         for raw, norm in near_misses:
-            print(f"    ⚠  Taxonomy has '{raw}' -> normalizes to '{norm}' (mapped OK)")
+            print(f"    [!]  Taxonomy has '{raw}' -> normalizes to '{norm}' (mapped OK)")
     else:
-        print("    ✓ No near-misses found.")
+        print("    [OK] No near-misses found.")
 
     # --- D: Special patterns ---
     print(f"\n[E] Special pattern checks:")
     for rule in set(raw_rules):
         u = rule.upper()
         if "MONTHS" in u:
-            print(f"    ℹ  Time/Other pattern: '{rule}' (normalized: '{normalize(rule)}')")
+            print(f"    [*]  Time/Other pattern: '{rule}' (normalized: '{normalize(rule)}')")
         if rule.upper() in ("PERMANENT", "PM"):
-            print(f"    ℹ  Permanent: '{rule}'")
+            print(f"    [*]  Permanent: '{rule}'")
 
     # --- Optional: write draft additions ---
     if args.draft_json:

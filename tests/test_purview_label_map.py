@@ -103,10 +103,11 @@ _fake_enums.validate_choice_value = _fake_validate
 sys.modules["app.models.sharepoint_enums"] = _fake_enums
 
 # ---- app.services.validation_service ---------------------------------------
+import app.services
 _fake_validation = types.ModuleType("app.services.validation_service")
-_fake_validation.determine_document_tagged_status = lambda status: "Auto-Tagged"
-sys.modules["app.services"] = types.ModuleType("app.services")
+_fake_validation.determine_document_tagged_status = lambda *args, **kwargs: "Auto-Tagged"
 sys.modules["app.services.validation_service"] = _fake_validation
+app.services.validation_service = _fake_validation
 
 # ---- httpx -----------------------------------------------------------------
 sys.modules.setdefault("httpx", MagicMock())

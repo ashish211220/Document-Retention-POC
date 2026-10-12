@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv(override=False)
 
 # Ensure Azure CLI is on PATH so DefaultAzureCredential can find it
 _az_cli_path = r"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin"
@@ -69,40 +69,26 @@ REVIEW_LIST_TAGGED_DONE = "Manually Tagged"      # value backend sets when done
 REVIEW_LIST_DOC_TYPE_COL = "DocumentType"        # reviewer's chosen document type
 REVIEW_LIST_RETENTION_RULE_COL = "RetentionRule" # reviewer's chosen rule e.g. AL+3
 
+# --- Fiscal Year Settings (UTIMCO: August 31) ---
+FISCAL_YEAR_END_MONTH = int(os.getenv("FISCAL_YEAR_END_MONTH", "8"))  # August
+FISCAL_YEAR_END_DAY = int(os.getenv("FISCAL_YEAR_END_DAY", "31"))    # 31st
 
-# Legacy base-code map — kept for PURVIEW_LABEL_STRATEGY=base_code rollback only
-PURVIEW_LABEL_NAME_MAP: dict[str, str] = {
-    "AL": "AL_V1",
-    "AV": "AV_V1",
-    "FE": "FE_V1",
-    "LA": "LA_V1",
-    "US": "US_V1",
-    "CE": "CE_V1",
-    "AC": "AC_V1",
-    "PM": "Forever",
-}
-PURVIEW_LABEL_MAPPING = PURVIEW_LABEL_NAME_MAP
 
-# 'per_rule' = look up FE+2 etc. from app/purview_labels.json (default)
-# 'base_code' = old behavior: look up FE, AL, etc. from PURVIEW_LABEL_NAME_MAP above
-PURVIEW_LABEL_STRATEGY = os.getenv("PURVIEW_LABEL_STRATEGY", "per_rule").lower()
-
-# When True, falls back to base_code label if per_rule mapping is missing (testing only)
-ALLOW_BASE_CODE_FALLBACK = os.getenv("ALLOW_BASE_CODE_FALLBACK", "false").lower() == "true"
+import logging as _logging
+_cfg_logger = _logging.getLogger(__name__)
 
 
 def validate_config():
+    missing = []
     if not AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT:
-        raise ValueError(
-            "Missing environment variable: AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT"
-        )
+        missing.append("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")
     if not AZURE_DOCUMENT_INTELLIGENCE_KEY:
-        raise ValueError(
-            "Missing environment variable: AZURE_DOCUMENT_INTELLIGENCE_KEY"
-        )
+        missing.append("AZURE_DOCUMENT_INTELLIGENCE_KEY")
     if SEARCH_MODE == "hybrid" and not AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME:
-        raise ValueError(
-            "Missing environment variable: AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME is required when SEARCH_MODE='hybrid'"
+        missing.append("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME")
+    if missing:
+        _cfg_logger.warning(
+            f"Missing AI configuration: {', '.join(missing)}. Document Intelligence or embeddings may be disabled."
         )
 
     sp_vars = {
@@ -112,9 +98,6 @@ def validate_config():
     }
     missing_sp = [k for k, v in sp_vars.items() if not v]
     if missing_sp:
-        print(
-            f"WARNING: SharePoint features disabled. Missing env vars: {', '.join(missing_sp)}"
+        _cfg_logger.warning(
+            f"SharePoint features disabled. Missing env vars: {', '.join(missing_sp)}"
         )
-
-
-validate_config()

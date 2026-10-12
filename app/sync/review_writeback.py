@@ -10,7 +10,7 @@ After all four steps succeed the row's DocumentTagged is set to "Manually Tagged
 """
 import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -100,6 +100,9 @@ async def _find_cls_record_by_doc_number(
         .where(DocumentRecord.document_number == document_number)
         .options(selectinload(ClassificationRecord.document))
     )
+    from app.db.database import is_postgres
+    if is_postgres():
+        stmt = stmt.with_for_update()
     result = await db.execute(stmt)
     return result.scalars().first()
 
@@ -255,6 +258,7 @@ async def _apply_one_reviewed_item(
         audit_action="human_review_applied",
         audit_notes=audit_note,
         force_purview_label=True,      # bypass AI confidence gate
+        review_required=False,         # Human has reviewed this document
     )
 
     # --- Mark classified_by = "human" BEFORE sync so AI pipeline is blocked
@@ -268,9 +272,18 @@ async def _apply_one_reviewed_item(
     cls_record.team_owner = tax_record.team_owner
     cls_record.retention_rule = effective_rule
     cls_record.retention_code = code or tax_record.retention_code
-    cls_record.retention_period = str(period) if period else None
+    cls_record.retention_period = period if period else None
     cls_record.retention_period_unit = unit
-    cls_record.retention_end_date = schedule.retention_end_date or ""
+    cls_record.retention_start_date = (
+        date.fromisoformat(schedule.retention_start_date)
+        if schedule.retention_start_date
+        else None
+    )
+    cls_record.retention_end_date = (
+        date.fromisoformat(schedule.retention_end_date)
+        if schedule.retention_end_date
+        else None
+    )
     cls_record.confidence_score = confidence
     cls_record.status = "Reviewed"
     await db.commit()  # commit early so AI guard is live immediately

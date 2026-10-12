@@ -5,23 +5,23 @@ from app.services.retention_schedule_service import calculate_retention_schedule
 # ── FE+N / AL+N / CD+N — Year Addition Rules ─────────────────────────────────
 
 def test_fe4_active():
-    """Standard active case: FE+4, not yet expired."""
+    """Standard active case: FE+4, not yet expired (FY end Aug 31 + 4 yrs)."""
     eval_date = date(2026, 9, 16)
     schedule = calculate_retention_schedule("FE+4", "2026-01-15", eval_date)
     assert schedule.retention_start_date == "2026-01-15"
-    assert schedule.retention_end_date == "2030-01-15"
+    assert schedule.retention_end_date == "2030-08-31"
     assert schedule.retention_period == "4 Years"
     assert schedule.lifecycle_status == "Active"
     assert schedule.review_required is False
     assert schedule.review_reason is None
-    assert "Retain until 2030-01-15" in schedule.next_action
+    assert "Retain until 2030-08-31" in schedule.next_action
 
 
 def test_fe4_eligible_for_review():
     """Expired retention: FE+4 past end date → triggers human review."""
     eval_date = date(2026, 9, 16)
     schedule = calculate_retention_schedule("FE+4", "2020-01-15", eval_date)
-    assert schedule.retention_end_date == "2024-01-15"
+    assert schedule.retention_end_date == "2024-08-31"
     assert schedule.lifecycle_status == "Eligible for Review"
     assert schedule.review_required is True
     assert schedule.review_reason is not None
@@ -98,10 +98,10 @@ def test_ye_uses_calendar_year_end():
 
 
 def test_fe_uses_fiscal_year_end():
-    """FE standalone uses June 30 (configured fiscal year-end)."""
+    """FE standalone uses August 31 (configured UTIMCO fiscal year-end)."""
     eval_date = date(2027, 1, 1)
     schedule = calculate_retention_schedule("FE", "2026-01-15", eval_date)
-    assert schedule.retention_end_date == "2026-06-30"
+    assert schedule.retention_end_date == "2026-08-31"
     assert schedule.lifecycle_status == "Eligible for Review"
     assert schedule.review_required is True
 
@@ -111,6 +111,29 @@ def test_fe_different_from_ye():
     schedule_ye = calculate_retention_schedule("YE", "2026-01-15", date(2025, 1, 1))
     schedule_fe = calculate_retention_schedule("FE", "2026-01-15", date(2025, 1, 1))
     assert schedule_ye.retention_end_date != schedule_fe.retention_end_date
+
+
+def test_fe_before_fiscal_year_end_boundary():
+    """Document dated before August 31 belongs to current FY (Aug 31 same year)."""
+    schedule = calculate_retention_schedule("FE+5", "2026-07-15")
+    # FY end = 2026-08-31 -> + 5 years = 2031-08-31
+    assert schedule.retention_end_date == "2031-08-31"
+
+
+def test_fe_after_fiscal_year_end_boundary():
+    """Document dated after August 31 belongs to next FY (Aug 31 next year)."""
+    schedule = calculate_retention_schedule("FE+5", "2026-09-15")
+    # FY end = 2027-08-31 -> + 5 years = 2032-08-31
+    assert schedule.retention_end_date == "2032-08-31"
+
+
+def test_ye_ce_with_years():
+    """YE+n and CE+n add years to calendar year-end (Dec 31)."""
+    s_ye = calculate_retention_schedule("YE+3", "2026-03-10")
+    assert s_ye.retention_end_date == "2029-12-31"
+
+    s_ce = calculate_retention_schedule("CE+2", "2026-08-01")
+    assert s_ce.retention_end_date == "2028-12-31"
 
 
 # ── Standalone Rules That MUST Require Human Review ──────────────────────────

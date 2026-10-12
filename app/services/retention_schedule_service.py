@@ -32,8 +32,11 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-FISCAL_YEAR_END_MONTH = 6  # June
-FISCAL_YEAR_END_DAY = 30  # 30th
+try:
+    from app.config import FISCAL_YEAR_END_MONTH, FISCAL_YEAR_END_DAY
+except ImportError:
+    FISCAL_YEAR_END_MONTH = 8  # August
+    FISCAL_YEAR_END_DAY = 31  # 31st
 
 
 class RetentionSchedule(BaseModel):
@@ -184,34 +187,46 @@ def calculate_retention_schedule(
     year_match = re.search(r"[+-](\d+)", rule_norm)
     if year_match:
         years = int(year_match.group(1))
-        end_date = _add_years(start_date, years)
-        end_date_str = end_date.isoformat()
-        is_completed = current_date >= end_date
 
         if rule_norm.startswith("FE"):
-            trigger = f"Remove {years} years after fiscal year end (FE). Note: start date is used as reference; for precise FE calculation, verify fiscal year-end."
+            anchor = _fiscal_year_end(start_date)
+            trigger = f"Remove {years} years after fiscal year end ({anchor.isoformat()}) (FE)"
+        elif rule_norm.startswith(("CE", "YE")):
+            anchor = date(start_date.year, 12, 31)
+            trigger = f"Remove {years} years after calendar year end ({anchor.isoformat()}) (YE/CE)"
         elif rule_norm.startswith("AL"):
+            anchor = start_date
             trigger = f"Remove {years} years after event/investment concludes or liquidates (AL)"
         elif rule_norm.startswith("AC"):
+            anchor = start_date
             trigger = f"Remove {years} years after conclusion/publication of event (AC)"
         elif rule_norm.startswith("US"):
+            anchor = start_date
             trigger = (
                 f"Retain for {years} years after being superseded by newer version (US)"
             )
         elif rule_norm.startswith("UO"):
+            anchor = start_date
             trigger = f"Retain for {years} years after last unopened/modified date (UO)"
         elif rule_norm.startswith("AD"):
+            anchor = start_date
             trigger = f"Retain for {years} years after asset is disposed (AD)"
         elif rule_norm.startswith("LA"):
+            anchor = start_date
             trigger = f"Retain for life of asset + {years} years (LA)"
-        elif rule_norm.startswith("CE") or rule_norm.startswith("YE"):
-            trigger = f"Remove {years} years after calendar year end (YE/CE)"
         elif rule_norm.startswith("CD"):
+            anchor = start_date
             trigger = f"Remove {years} years after creation date (CD)"
         elif rule_norm.startswith("AV"):
+            anchor = start_date
             trigger = f"Retain {years} year{'s' if years > 1 else ''} after administrative value ends (AV)"
         else:
+            anchor = start_date
             trigger = f"Retain for {years} years after applicable event date."
+
+        end_date = _add_years(anchor, years)
+        end_date_str = end_date.isoformat()
+        is_completed = current_date >= end_date
 
         return RetentionSchedule(
             retention_start_date=start_date_str,

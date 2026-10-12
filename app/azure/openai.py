@@ -1,7 +1,9 @@
+import asyncio
 import json
+import os
 import re
 from typing import Optional
-from openai import AzureOpenAI
+from openai import AzureOpenAI, AsyncAzureOpenAI
 from app.config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_API_KEY,
@@ -14,6 +16,11 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 MAX_CONTENT_CHARS = 8000
+OPENAI_TIMEOUT_SECONDS = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "60.0"))
+OPENAI_MAX_RETRIES = int(os.getenv("OPENAI_MAX_RETRIES", "3"))
+
+_client: Optional[AzureOpenAI] = None
+_async_client: Optional[AsyncAzureOpenAI] = None
 
 
 def _get_base_endpoint(endpoint: str) -> str:
@@ -24,12 +31,32 @@ def _get_base_endpoint(endpoint: str) -> str:
 
 
 def _get_client() -> AzureOpenAI:
-    base_endpoint = _get_base_endpoint(AZURE_OPENAI_ENDPOINT)
-    return AzureOpenAI(
-        azure_endpoint=base_endpoint,
-        api_key=AZURE_OPENAI_API_KEY,
-        api_version=AZURE_OPENAI_API_VERSION,
-    )
+    global _client
+    if _client is None:
+        base_endpoint = _get_base_endpoint(AZURE_OPENAI_ENDPOINT)
+        _client = AzureOpenAI(
+            azure_endpoint=base_endpoint,
+            api_key=AZURE_OPENAI_API_KEY,
+            api_version=AZURE_OPENAI_API_VERSION,
+            timeout=OPENAI_TIMEOUT_SECONDS,
+            max_retries=OPENAI_MAX_RETRIES,
+        )
+    return _client
+
+
+def _get_async_client() -> AsyncAzureOpenAI:
+    global _async_client
+    if _async_client is None:
+        base_endpoint = _get_base_endpoint(AZURE_OPENAI_ENDPOINT)
+        _async_client = AsyncAzureOpenAI(
+            azure_endpoint=base_endpoint,
+            api_key=AZURE_OPENAI_API_KEY,
+            api_version=AZURE_OPENAI_API_VERSION,
+            timeout=OPENAI_TIMEOUT_SECONDS,
+            max_retries=OPENAI_MAX_RETRIES,
+        )
+    return _async_client
+
 
 
 def chat_completion(
@@ -90,3 +117,16 @@ def generate_embedding(text: str) -> list[float]:
     except Exception as e:
         logger.error(f"Azure OpenAI embedding failed: {e}")
         raise
+
+
+async def chat_completion_async(
+    system_prompt: str, user_prompt: str, temperature: float = 0.1
+) -> Optional[str]:
+    """Asynchronously execute chat completion on a background worker thread."""
+    return await asyncio.to_thread(chat_completion, system_prompt, user_prompt, temperature)
+
+
+async def generate_embedding_async(text: str) -> list[float]:
+    """Asynchronously generate embedding on a background worker thread."""
+    return await asyncio.to_thread(generate_embedding, text)
+

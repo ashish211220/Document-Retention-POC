@@ -31,3 +31,11 @@ async def get_db():
         return
     async with async_session() as session:
         yield session
+
+
+def is_postgres() -> bool:
+    """Return True if the configured database engine is PostgreSQL."""
+    if engine is None:
+        return False
+    return getattr(engine, "dialect", None) is not None and engine.dialect.name == "postgresql"
+

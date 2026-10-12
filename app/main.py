@@ -10,22 +10,17 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
-from app.db.database import engine, Base
-from app.models.db_models import *  # Ensure models are loaded before create_all
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logging.info("Application startup: validating configuration...")
+    from app.config import validate_config
+
+    validate_config()
+
     logging.info("Application startup: loading retention taxonomy...")
     load_taxonomy()
-
-    if engine is not None:
-        logging.info("Initializing database tables...")
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logging.info("Database tables initialized.")
-    else:
-        logging.warning("Database engine not configured, skipping table creation.")
 
     from app.sync.scheduler import start_scheduler
 
@@ -48,13 +43,18 @@ app = FastAPI(
 
 app.include_router(sharepoint.router, prefix="/api/sharepoint", tags=["SharePoint"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS: Only enabled when specific origins are configured; wildcard with credentials disabled
+CORS_ALLOWED_ORIGINS = [
+    o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
+if CORS_ALLOWED_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 

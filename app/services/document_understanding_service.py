@@ -11,6 +11,7 @@ CRITICAL BUSINESS RULE:
   Classification happens in Phase 5 using the approved taxonomy.
 """
 
+import asyncio
 from typing import Optional
 from app.models.document import DocumentProfile
 from app.models.classification import DocumentUnderstanding
@@ -109,3 +110,9 @@ Page Count: {profile.metadata.page_count}
             f"Document understanding failed for '{profile.document_name}': {e}"
         )
         return None
+
+
+async def analyze_document_async(profile: DocumentProfile) -> Optional[DocumentUnderstanding]:
+    """Asynchronously analyze document using a worker thread."""
+    return await asyncio.to_thread(analyze_document, profile)
+

@@ -3,6 +3,7 @@ Classification Service
 Orchestrates the full document classification pipeline.
 """
 
+import asyncio
 import json
 from typing import Optional, List
 from app.models.document import DocumentProfile
@@ -25,8 +26,8 @@ TOP_K_CANDIDATES = 5
 CLASSIFICATION_SYSTEM_PROMPT = """You are a document classification expert for an enterprise records retention system.
 
 You will be given:
-1. A document profile (name, summary, keywords, type indicators)
-2. A list of approved retention taxonomy candidates (each with an ID, document type, category, section)
+1. Document metadata within <document_metadata> tags (name, summary, keywords, type indicators)
+2. A list of approved retention taxonomy candidates within <approved_candidates> tags (each with an ID, document type, category, section)
 
 Your task is to select the SINGLE BEST matching candidate from the provided list.
 
@@ -90,7 +91,7 @@ def _calculate_confidence(
     else:
         keyword_score = 0.0
 
-    combined = (ai_confidence * 0.40) + (rank_score * 0.35) + (keyword_score * 0.25)
+    combined = (ai_confidence * 0.35) + (rank_score * 0.30) + (keyword_score * 0.35)
     combined = round(min(1.0, max(0.0, combined)), 3)
 
     logger.info(
@@ -162,19 +163,21 @@ def classify_document(
         for r in candidate_records
     ]
 
-    user_prompt = f"""Document to Classify:
-  Name: {profile.document_name}
-  Title: {understanding.title or 'Unknown'}
-  Summary: {understanding.summary or 'Not available'}
-  Keywords: {', '.join(understanding.keywords)}
-  Type Indicators: {', '.join(understanding.document_type_indicators)}
-  Department: {understanding.department or 'Unknown'}
-  Team Owner: {understanding.team_owner or 'Unknown'}
+    user_prompt = f"""<document_metadata>
+Name: {profile.document_name}
+Title: {understanding.title or 'Unknown'}
+Summary: {understanding.summary or 'Not available'}
+Keywords: {', '.join(understanding.keywords)}
+Type Indicators: {', '.join(understanding.document_type_indicators)}
+Department: {understanding.department or 'Unknown'}
+Team Owner: {understanding.team_owner or 'Unknown'}
+</document_metadata>
 
-Approved Retention Taxonomy Candidates:
+<approved_candidates>
 {candidates_text}
+</approved_candidates>
 
-Select the single best matching candidate from the list above. Return only the JSON object."""
+Select the single best matching candidate from the approved candidates above. Return only the JSON object."""
 
     try:
         raw_response = chat_completion(
@@ -182,15 +185,15 @@ Select the single best matching candidate from the list above. Return only the J
         )
         parsed = parse_json_response(raw_response)
     except Exception as e:
-        logger.error(f"OpenAI classification call failed: {e}")
+        logger.exception("OpenAI classification call failed")
         return ClassificationResult(
             document_id=profile.document_id,
             classification_status="pending_review",
             review_required=True,
             review_reasons=[
-                f"AI classification failed: {str(e)}. Manual review required."
+                "AI classification service unavailable. Manual review required."
             ],
-            reason=f"AI classification failed: {str(e)}. Manual review required.",
+            reason="AI classification call encountered an error. Manual review required.",
             candidates=candidate_objects,
         )
 
@@ -294,3 +297,11 @@ Select the single best matching candidate from the list above. Return only the J
         next_action=schedule.next_action,
         trigger_condition=schedule.trigger_condition,
     )
+
+
+async def classify_document_async(
+    profile: DocumentProfile, understanding: DocumentUnderstanding
+) -> ClassificationResult:
+    """Asynchronously classify document using a worker thread."""
+    return await asyncio.to_thread(classify_document, profile, understanding)
+
