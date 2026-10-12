@@ -145,6 +145,9 @@ class _MockGraphClient:
 def mock_graph_client(monkeypatch):
     monkeypatch.setattr("app.sync.sharepoint_sync._get_graph_client", lambda: _MockGraphClient())
 
+if "app.sync.sharepoint_sync" in sys.modules and not hasattr(sys.modules["app.sync.sharepoint_sync"], "__file__"):
+    del sys.modules["app.sync.sharepoint_sync"]
+
 from app.sync.sharepoint_sync import (  # noqa: E402
     SyncPayload,
     SyncResult,

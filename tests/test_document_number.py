@@ -65,16 +65,17 @@ from app.sync.sharepoint_sync import format_document_id, SyncPayload
 # ===========================================================================
 
 class TestFormatDocumentId:
-    def test_returns_integer(self):
+    def test_returns_string(self):
         result = format_document_id(101)
-        assert isinstance(result, int)
+        assert isinstance(result, str)
+        assert result == "101"
 
     def test_returns_same_number(self):
-        assert format_document_id(101) == 101
-        assert format_document_id(999) == 999
+        assert format_document_id(101) == "101"
+        assert format_document_id(999) == "999"
 
     def test_sequence_start(self):
-        assert format_document_id(101) == 101
+        assert format_document_id(101) == "101"
 
 
 # ===========================================================================
@@ -197,11 +198,11 @@ class TestSyncPayloadDocumentNumber:
 
     def test_format_document_id_applied_to_payload_number(self):
         payload = self._make_payload(document_number=101)
-        assert format_document_id(payload.document_number) == 101
+        assert format_document_id(payload.document_number) == "101"
 
     @pytest.mark.asyncio
-    async def test_new_row_writes_document_number_as_integer(self):
-        """POC_Documents_Retention POST must send DocumentID as integer 101."""
+    async def test_new_row_writes_document_number_as_string(self):
+        """POC_Documents_Retention POST must send DocumentID as string '101' for Text column."""
         payload = self._make_payload(document_number=101, classification_status="auto_approved")
 
         captured_fields = {}
@@ -228,8 +229,8 @@ class TestSyncPayloadDocumentNumber:
             await sync_classification_to_sharepoint("test-token", payload, mock_db)
 
         doc_id = captured_fields.get("DocumentID")
-        assert doc_id == 101, f"Expected 101 (int), got {doc_id!r}"
-        assert isinstance(doc_id, int), f"DocumentID must be int, got {type(doc_id)}"
+        assert doc_id == "101", f"Expected '101' (str), got {doc_id!r}"
+        assert isinstance(doc_id, str), f"DocumentID must be str, got {type(doc_id)}"
 
     @pytest.mark.asyncio
     async def test_audit_log_uses_same_document_number(self):
@@ -264,8 +265,8 @@ class TestSyncPayloadDocumentNumber:
             from app.sync.sharepoint_sync import sync_classification_to_sharepoint
             await sync_classification_to_sharepoint("test-token", payload, mock_db)
 
-        assert retention_doc_id == 101
-        assert audit_doc_id == 101
+        assert retention_doc_id == "101"
+        assert audit_doc_id == "101"
         assert retention_doc_id == audit_doc_id, \
             "Retention list and audit log must use the same DocumentID"
 

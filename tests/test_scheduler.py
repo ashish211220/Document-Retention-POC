@@ -147,6 +147,8 @@ class _FakeSyncResult:
 
 _fake_sp_sync = types.ModuleType("app.sync.sharepoint_sync")
 _fake_sp_sync.SyncPayload = _FakeSyncPayload
+_fake_sp_sync.SyncResult = _FakeSyncResult
+_fake_sp_sync.format_document_id = lambda x: str(x) if x is not None else None
 _fake_sp_sync.sync_classification_to_sharepoint = AsyncMock(return_value=_FakeSyncResult())
 sys.modules["app.sync.sharepoint_sync"] = _fake_sp_sync
 

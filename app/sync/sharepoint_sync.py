@@ -1,7 +1,7 @@
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timezone
+from typing import Any, Dict, List, Optional, Union
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,9 +48,18 @@ class NoLabelMappingError(Exception):
         )
 
 
-# Formats the sequential document ID as an integer
-def format_document_id(document_number: int) -> int:
-    return int(document_number)
+# Formats the sequential document ID as a string for SharePoint text column
+def format_document_id(document_number: Any) -> Optional[str]:
+    """
+    Returns the SharePoint DocumentID value for a given document_number.
+
+    Returned as a string because the SharePoint DocumentID column is a Text
+    field. Passing an integer directly causes Graph API to fail with a
+    500 Internal Server Error (generalException).
+    """
+    if document_number is None:
+        return None
+    return str(document_number)
 
 
 class SyncPayload:
@@ -65,11 +74,11 @@ class SyncPayload:
         section: Optional[str],
         retention_code: Optional[str],  # base trigger code e.g. "AL", "FE"
         retention_rule: Optional[str],  # full rule e.g. "AL+3"
-        retention_end_date: Optional[str],  # ISO date string
+        retention_end_date: Optional[Union[str, date, datetime]],  # ISO date string or date object
         confidence_score: float,
         team_owner: Optional[str],
         classification_status: str,
-        document_number: Optional[int],  # friendly sequential ID (101, 102, ...)
+        document_number: Optional[Union[int, str]],  # friendly sequential ID (101, 102, ...)
         drive_id: Optional[str],  # drive ID of POC_Source_Documents
         sharepoint_item_id: Optional[str],  # driveItem ID of the file
         sharepoint_list_item_id: Optional[
@@ -91,7 +100,12 @@ class SyncPayload:
         self.section = section
         self.retention_code = retention_code
         self.retention_rule = retention_rule
-        self.retention_end_date = retention_end_date
+        if hasattr(retention_end_date, "isoformat"):
+            self.retention_end_date = retention_end_date.isoformat()
+        elif retention_end_date:
+            self.retention_end_date = str(retention_end_date)
+        else:
+            self.retention_end_date = None
         self.confidence_score = confidence_score
         self.team_owner = team_owner
         self.classification_status = classification_status
