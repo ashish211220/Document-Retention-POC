@@ -491,14 +491,17 @@ async def sync_classification_to_sharepoint(
                 bool(payload.review_required) or cls_review_req
             )
 
+            existing = None
             if existing_list_item_id:
                 try:
                     existing = await graph.get_retention_list_item(
                         token, site_id, retention_list_id, existing_list_item_id
                     )
-                    existing_fields = existing.get("fields", {})
                 except Exception:
-                    existing_fields = {}
+                    existing = None
+
+            if existing_list_item_id and existing:
+                existing_fields = existing.get("fields", {})
 
                 update_fields: Dict[str, Any] = {
                     "ClassificationStatus": payload.classification_status,
